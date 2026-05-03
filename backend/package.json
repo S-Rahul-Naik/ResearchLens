@@ -1,0 +1,27 @@
+{
+  "name": "researchlens-backend",
+  "version": "1.0.0",
+  "description": "Backend API for ResearchLens 9-module research intelligence pipeline",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cloudinary": "^1.41.3",
+    "cors": "^2.8.5",
+    "dotenv": "^17.4.2",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.6.1",
+    "multer": "^2.0.2",
+    "multer-storage-cloudinary": "^4.0.0",
+    "pdf-parse": "^2.4.5",
+    "researchlens-backend": "file:"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4"
+  }
+}

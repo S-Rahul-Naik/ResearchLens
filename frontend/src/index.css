@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  scroll-behavior: smooth;
+}
+
+@keyframes barGrow {
+  from { width: 0%; }
+  to   { width: var(--bar-width); }
+}
+
+.animate-bar {
+  animation: barGrow 0.9s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}
+
+@keyframes fadeSlideUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-up {
+  animation: fadeSlideUp 0.4s ease forwards;
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Print styles: hide everything except the gap report ── */
+@media print {
+  body > * { display: none !important; }
+  #print-gap-report { display: block !important; }
+  #print-gap-report * { visibility: visible; }
+  @page { margin: 20mm; }
+}
