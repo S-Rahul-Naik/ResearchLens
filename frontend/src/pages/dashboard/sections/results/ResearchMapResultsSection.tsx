@@ -40,6 +40,15 @@ interface AdaptedPoint {
   year: number;
 }
 
+interface Centroid {
+  x: number;
+  y: number;
+  topicId: string;
+  topicName: string;
+  color: string;
+  paperCount: number;
+}
+
 function bezierCurve(
   x1: number,
   y1: number,
@@ -178,6 +187,11 @@ export default function ResearchMapResultsSection({ backendResult }: { backendRe
     });
   }, [centroids, adaptedPoints]);
 
+  const activeGap = useMemo(() => {
+    if (!hoveredGap) return null;
+    return adaptedGaps.find(g => g.id === hoveredGap) || null;
+  }, [hoveredGap, adaptedGaps]);
+
   const handlePaperEnter = (
     e: React.MouseEvent,
     pt: AdaptedPoint
@@ -223,40 +237,6 @@ export default function ResearchMapResultsSection({ backendResult }: { backendRe
     window.addEventListener('mousemove', onMove);
     return () => window.removeEventListener('mousemove', onMove);
   }, [tooltip.visible]);
-
-  const br = backendResult;
-
-  // Adapt real or mock data
-  const adaptedPoints = useMemo(() => {
-    if (br) {
-      const topicColorMap = new Map<string, string>();
-      const topicNameMap = new Map<string, string>();
-      br.modules.module2.topics.forEach((t, i) => {
-        topicColorMap.set(t.topicId, TOPIC_COLORS[i % TOPIC_COLORS.length]);
-        topicNameMap.set(t.topicId, t.name);
-      });
-      return br.modules.module5.map.points.map(p => ({
-        paperId: p.paperId,
-        title: p.title,
-        x: p.x,
-        y: p.y,
-        topicId: p.topicId,
-        topicName: topicNameMap.get(p.topicId) ?? p.topicId,
-        color: topicColorMap.get(p.topicId) ?? '#6b7280',
-        year: p.year ?? 2020,
-      }));
-    }
-    return mockMapPoints.map(p => ({
-      paperId: p.paperId,
-      title: p.title,
-      x: p.x,
-      y: p.y,
-      topicId: p.topicId,
-      topicName: p.topicName,
-      color: p.color,
-      year: p.year,
-    }));
-  }, [br]);
 
   return (
     <section id="result-map" className="mb-12">

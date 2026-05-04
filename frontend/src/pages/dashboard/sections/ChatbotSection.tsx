@@ -11,9 +11,9 @@ function generateAnswer(query: string, realTopics: RunAllResult['modules']['modu
   const gaps = realGaps.length > 0 ? realGaps : null;
   const papers = realPapers.length > 0 ? realPapers : mockPapers;
   if (q.includes('gap') || q.includes('gaps')) {
-    const topGap = gaps ? gaps[0] : mockGaps[0];
-    const gapAName = gaps ? topGap.topicALabel : (topGap as typeof mockGaps[0]).topicAName;
-    const gapBName = gaps ? topGap.topicBLabel : (topGap as typeof mockGaps[0]).topicBName;
+    const topGap = gaps ? (gaps[0] as RunAllResult['modules']['module3']['gaps'][0]) : mockGaps[0];
+    const gapAName = gaps ? (topGap as RunAllResult['modules']['module3']['gaps'][0]).topicALabel : (topGap as typeof mockGaps[0]).topicAName;
+    const gapBName = gaps ? (topGap as RunAllResult['modules']['module3']['gaps'][0]).topicBLabel : (topGap as typeof mockGaps[0]).topicBName;
     const gapScore = gaps ? (topGap as RunAllResult['modules']['module3']['gaps'][0]).gapScore : (topGap as typeof mockGaps[0]).gapScore;
     const similarity = gaps ? (topGap as RunAllResult['modules']['module3']['gaps'][0]).similarity : (topGap as typeof mockGaps[0]).similarityScore;
     const coOcc = gaps ? (topGap as RunAllResult['modules']['module3']['gaps'][0]).coOccurrence : (topGap as typeof mockGaps[0]).coOccurrenceCount;

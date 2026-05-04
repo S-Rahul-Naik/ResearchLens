@@ -157,11 +157,20 @@ router.post('/modules/5-visualization', (req, res) => {
   res.json(result);
 });
 
-router.post('/modules/6-chatbot', (req, res) => {
-  const papers = pickPapers(req.body?.papers, getPapers());
-  const question = req.body?.question || '';
-  const result = runModule6Chatbot(papers, question);
-  res.json(result);
+router.post('/modules/6-chatbot', async (req, res) => {
+  try {
+    const papers = pickPapers(req.body?.papers, getPapers());
+    const question = req.body?.question || '';
+    const topics = req.body?.topics || runModule2TopicModeling(papers).topics || [];
+    const gaps = req.body?.gaps || runModule3GapDetection(papers, topics).gaps || [];
+    const trends = req.body?.trends || runModule4TrendDetection(papers, topics).trends || [];
+    
+    const result = await runModule6Chatbot(papers, question, topics, gaps, trends);
+    res.json(result);
+  } catch (error) {
+    console.error('Module 6 Error:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 router.post('/modules/7-contradiction-detection', (req, res) => {
@@ -184,52 +193,57 @@ router.post('/modules/9-related-work-draft', (req, res) => {
   res.json(result);
 });
 
-router.post('/modules/run-all', (req, res) => {
-  const papers = pickPapers(req.body?.papers, getPapers());
-  const question = req.body?.question || 'What are the key findings and open research gaps?';
+router.post('/modules/run-all', async (req, res) => {
+  try {
+    const papers = pickPapers(req.body?.papers, getPapers());
+    const question = req.body?.question || 'What are the key findings and open research gaps?';
 
-  const m1 = runModule1Summarization(papers);
-  const m2 = runModule2TopicModeling(papers);
-  const m3 = runModule3GapDetection(papers, m2.topics);
-  const m4 = runModule4TrendDetection(papers, m2.topics);
-  const m5 = runModule5Visualization(papers, m2.topics, m3.gaps);
-  const m6 = runModule6Chatbot(papers, question);
-  const m7 = runModule7ContradictionDetection(papers, m2.topics);
-  const m8 = runModule8DatasetMethodMatrix(papers);
-  const m9 = runModule9RelatedWorkDraft(papers, m2.topics);
+    const m1 = runModule1Summarization(papers);
+    const m2 = runModule2TopicModeling(papers);
+    const m3 = runModule3GapDetection(papers, m2.topics);
+    const m4 = runModule4TrendDetection(papers, m2.topics);
+    const m5 = runModule5Visualization(papers, m2.topics, m3.gaps);
+    const m6 = await runModule6Chatbot(papers, question, m2.topics, m3.gaps, m4.trends);
+    const m7 = runModule7ContradictionDetection(papers, m2.topics);
+    const m8 = runModule8DatasetMethodMatrix(papers);
+    const m9 = runModule9RelatedWorkDraft(papers, m2.topics);
 
-  const modulesInOrder = [
-    { moduleId: 1, name: 'Summarization', result: m1 },
-    { moduleId: 2, name: 'Topic Modeling', result: m2 },
-    { moduleId: 3, name: 'Gap Detection', result: m3 },
-    { moduleId: 4, name: 'Trend Detection', result: m4 },
-    { moduleId: 5, name: 'Visualization', result: m5 },
-    { moduleId: 6, name: 'RAG Chatbot', result: m6 },
-    { moduleId: 7, name: 'Contradiction Detection', result: m7 },
-    { moduleId: 8, name: 'Dataset/Method Matrix', result: m8 },
-    { moduleId: 9, name: 'Related Work Auto-Draft', result: m9 }
-  ];
+    const modulesInOrder = [
+      { moduleId: 1, name: 'Summarization', result: m1 },
+      { moduleId: 2, name: 'Topic Modeling', result: m2 },
+      { moduleId: 3, name: 'Gap Detection', result: m3 },
+      { moduleId: 4, name: 'Trend Detection', result: m4 },
+      { moduleId: 5, name: 'Visualization', result: m5 },
+      { moduleId: 6, name: 'RAG Chatbot', result: m6 },
+      { moduleId: 7, name: 'Contradiction Detection', result: m7 },
+      { moduleId: 8, name: 'Dataset/Method Matrix', result: m8 },
+      { moduleId: 9, name: 'Related Work Auto-Draft', result: m9 }
+    ];
 
-  const run = {
-    id: `run-${Date.now()}`,
-    createdAt: new Date().toISOString(),
-    papersCount: papers.length,
-    modulesInOrder,
-    modules: {
-      module1: m1,
-      module2: m2,
-      module3: m3,
-      module4: m4,
-      module5: m5,
-      module6: m6,
-      module7: m7,
-      module8: m8,
-      module9: m9
-    }
-  };
+    const run = {
+      id: `run-${Date.now()}`,
+      createdAt: new Date().toISOString(),
+      papersCount: papers.length,
+      modulesInOrder,
+      modules: {
+        module1: m1,
+        module2: m2,
+        module3: m3,
+        module4: m4,
+        module5: m5,
+        module6: m6,
+        module7: m7,
+        module8: m8,
+        module9: m9
+      }
+    };
 
-  addRun(run);
-  res.json(run);
+    addRun(run);
+    res.json(run);
+  } catch (error) {
+    console.error('Run-All Error:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 module.exports = router;
