@@ -1,7 +1,4 @@
 import { useState, useMemo } from 'react';
-import { mockTrends, type TopicTrend } from '../../../mocks/trends';
-import { mockGaps } from '../../../mocks/gaps';
-import { mockPapers } from '../../../mocks/papers';
 import type { RunAllResult, BackendPaper } from '../../../lib/api';
 
 const TOPIC_COLORS = ['#0d9488','#f59e0b','#8b5cf6','#ec4899','#10b981','#06b6d4','#f97316','#3b82f6','#14b8a6','#a855f7'];
@@ -151,13 +148,13 @@ export default function TrendsSection({ backendResult, papers: propPapers = [] }
         return { topicId: t.topicId, topicName: t.topicName, trend: t.trend, growthRate: t.slope, peakYear: peak.year, dataPoints: sorted, color: TOPIC_COLORS[i % TOPIC_COLORS.length] };
       });
     }
-    return mockTrends;
+    return [];
   }, [backendResult]);
 
-  const allPapers = useMemo(() => propPapers.length > 0 ? propPapers : mockPapers, [propPapers]);
-  const allGapTopicAIds = useMemo(() => backendResult?.modules.module3.gaps.map(g => g.topicA) ?? mockGaps.map(g => g.topicAId), [backendResult]);
-  const allGapTopicBIds = useMemo(() => backendResult?.modules.module3.gaps.map(g => g.topicB) ?? mockGaps.map(g => g.topicBId), [backendResult]);
-  const gapEvidencePaperIds = useMemo(() => backendResult?.modules.module3.gaps.flatMap(g => g.evidencePaperIds) ?? mockGaps.flatMap(g => g.paperIdsBridging), [backendResult]);
+  const allPapers = useMemo(() => propPapers, [propPapers]);
+  const allGapTopicAIds = useMemo(() => backendResult?.modules.module3.gaps.map(g => g.topicA) ?? [], [backendResult]);
+  const allGapTopicBIds = useMemo(() => backendResult?.modules.module3.gaps.map(g => g.topicB) ?? [], [backendResult]);
+  const gapEvidencePaperIds = useMemo(() => backendResult?.modules.module3.gaps.flatMap(g => g.evidencePaperIds) ?? [], [backendResult]);
 
   const [filter, setFilter] = useState<'all' | 'rising' | 'stable' | 'declining'>('all');
   const filtered = filter === 'all' ? trends : trends.filter(t => t.trend === filter);

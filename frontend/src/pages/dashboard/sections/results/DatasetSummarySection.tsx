@@ -1,52 +1,47 @@
-import { mockPapers } from '../../../../mocks/papers';
-import { mockTopics } from '../../../../mocks/topics';
-import { mockGaps } from '../../../../mocks/gaps';
-import { mockEvaluation } from '../../../../mocks/evaluation';
 import type { RunAllResult } from '../../../../lib/api';
+import type { AnalysisRun } from '../../../../hooks/useAnalysisHistory';
 
-export default function DatasetSummarySection({ backendResult }: { backendResult?: RunAllResult | null }) {
+export default function DatasetSummarySection({ backendResult, latestRun }: { backendResult?: RunAllResult | null; latestRun?: AnalysisRun | null }) {
   const br = backendResult;
-  const papersCount = br ? br.papersCount : mockPapers.length;
-  const topics = br ? br.modules.module2.topics : mockTopics;
-  const gaps = br ? br.modules.module3.gaps : null;
+  const papersCount = br?.papersCount ?? latestRun?.papers ?? 0;
+  const topics = br?.modules.module2.topics ?? [];
+  const topicsCount = topics.length || (latestRun?.topics ?? 0);
+  const gaps = br?.modules.module3.gaps ?? [];
+  const gapsCount = gaps.length || (latestRun?.gaps ?? 0);
 
   const allYears = br
     ? br.modules.module4.trends.flatMap(t => t.yearlyCounts.map(yc => yc.year))
-    : [];
+    : latestRun
+      ? [latestRun.yearRange.start, latestRun.yearRange.end]
+      : [];
   const yearRange = allYears.length > 0
     ? { start: Math.min(...allYears), end: Math.max(...allYears) }
-    : mockEvaluation.yearRange;
+    : { start: new Date().getFullYear(), end: new Date().getFullYear() };
 
   const risingTopics = br
     ? br.modules.module4.trends.filter(t => t.trend === 'rising').length
-    : mockTopics.filter(t => t.trend === 'rising').length;
+    : 0;
 
-  const zeroCoocc = br
-    ? br.modules.module3.gaps.filter(g => g.coOccurrence === 0).length
-    : mockGaps.filter(g => g.coOccurrenceCount === 0).length;
-
-  const gapsCount = br ? br.modules.module3.gaps.length : mockGaps.length;
+  const zeroCoocc = br ? gaps.filter(g => g.coOccurrence === 0).length : 0;
 
   const avgCoherence = br && topics.length > 0
     ? topics.reduce((s, t) => s + t.coherence, 0) / topics.length
-    : mockEvaluation.topicCoherence;
-  const topicCoverage = br
-    ? Math.min(1, papersCount > 0 ? topics.reduce((s, t) => s + t.paperIds.length, 0) / papersCount : 0.8)
-    : mockEvaluation.topicCoverage;
+    : 0;
+  const topicCoverage = br && papersCount > 0
+    ? Math.min(1, topics.reduce((s, t) => s + t.paperIds.length, 0) / papersCount)
+    : 0;
   const gapNovelty = br && gapsCount > 0
-    ? Math.min(1, br.modules.module3.gaps.reduce((s, g) => s + g.gapScore, 0) / gapsCount)
-    : mockEvaluation.gapNovelty;
+    ? Math.min(1, gaps.reduce((s, g) => s + g.gapScore, 0) / gapsCount)
+    : 0;
   const modelQuality = br
     ? +((avgCoherence * 0.4 + topicCoverage * 0.3 + gapNovelty * 0.3)).toFixed(2)
-    : mockEvaluation.modelQuality;
+    : latestRun?.qualityScore ?? 0;
 
-  const processingTimeMs = br ? 0 : mockEvaluation.processingTimeMs;
-  const avgPapersPerTopic = br && topics.length > 0
+  const processingTimeMs = 0;
+  const avgPapersPerTopic = topics.length > 0
     ? +(topics.reduce((s, t) => s + t.paperIds.length, 0) / topics.length).toFixed(1)
-    : mockEvaluation.avgPapersPerTopic;
-  const highConfGaps = br
-    ? br.modules.module3.gaps.filter(g => g.gapScore > 0.5).length
-    : mockEvaluation.highConfidenceGaps;
+    : 0;
+  const highConfGaps = gaps.filter(g => g.gapScore > 0.5).length;
 
   const qualityMetrics = [
     { label: 'Topic Coherence', value: avgCoherence, color: '#0d9488' },
@@ -69,7 +64,7 @@ export default function DatasetSummarySection({ backendResult }: { backendResult
     {
       icon: 'ri-price-tag-3-line',
       label: 'Topics Detected',
-      value: topics.length,
+      value: topicsCount,
       sub: `${risingTopics} rising`,
       color: 'text-teal-700',
       bg: 'bg-teal-50',

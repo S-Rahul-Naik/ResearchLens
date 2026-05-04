@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
-import { mockGaps, type ResearchGap } from '../../../mocks/gaps';
-import { mockPapers } from '../../../mocks/papers';
+import type { ResearchGap } from '../../../mocks/gaps';
 import GapCard from './gaps/GapCard';
 import GapDetailPanel from './gaps/GapDetailPanel';
 import GapCompareModal from './gaps/GapCompareModal';
@@ -51,10 +50,10 @@ function exportPDF(gaps: ResearchGap[]) {
 export default function GapsSection({ backendResult, papers: propPapers = [] }: { backendResult?: RunAllResult | null; papers?: BackendPaper[] }) {
   const gaps: ResearchGap[] = useMemo(() => {
     const raw = backendResult?.modules.module3.gaps;
-    return raw && raw.length > 0 ? adaptGaps(raw) : mockGaps;
+    return raw && raw.length > 0 ? adaptGaps(raw) : [];
   }, [backendResult]);
 
-  const paperList = propPapers.length > 0 ? propPapers : mockPapers;
+  const paperList = propPapers.length > 0 ? propPapers : [];
 
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [sortBy, setSortBy] = useState<'gapScore' | 'similarity' | 'coOccurrence'>('gapScore');

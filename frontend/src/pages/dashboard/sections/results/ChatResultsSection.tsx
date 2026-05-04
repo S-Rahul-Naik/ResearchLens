@@ -8,7 +8,7 @@ function formatContent(text: string) {
   });
 }
 
-export default function ChatResultsSection({ backendResult, papers }: { backendResult?: RunAllResult | null; papers: BackendPaper[] }) {
+export default function ChatResultsSection({ backendResult, papers = [] }: { backendResult?: RunAllResult | null; papers?: BackendPaper[] }) {
   const [query, setQuery] = useState('');
   const [lastQuestion, setLastQuestion] = useState('');
   const [answer, setAnswer] = useState('');

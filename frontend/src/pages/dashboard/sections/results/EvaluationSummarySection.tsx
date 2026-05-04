@@ -1,5 +1,4 @@
-import { mockEvaluation } from '../../../../mocks/evaluation';
-import { mockTopics } from '../../../../mocks/topics';
+import { useMemo } from 'react';
 import type { RunAllResult } from '../../../../lib/api';
 
 const TOPIC_COLORS = ['#0d9488', '#f59e0b', '#8b5cf6', '#e11d48', '#3b82f6', '#ec4899', '#10b981', '#f97316'];
@@ -23,41 +22,31 @@ function MetricGauge({ label, value, color, description }: { label: string; valu
 export default function EvaluationSummarySection({ backendResult }: { backendResult?: RunAllResult | null }) {
   const br = backendResult;
 
-  // Derive metrics from backend or use mock
-  const totalPapers = br ? br.papersCount : mockEvaluation.totalPapers;
-  const topics = br ? br.modules.module2.topics : null;
-  const gaps = br ? br.modules.module3.gaps : null;
-  const totalTopics = br ? (topics?.length ?? 0) : mockEvaluation.totalTopics;
-  const totalGaps = br ? (gaps?.length ?? 0) : mockEvaluation.totalGaps;
-  const highConfGaps = br ? (gaps?.filter(g => g.gapScore > 0.5).length ?? 0) : mockEvaluation.highConfidenceGaps;
+  const totalPapers = br?.papersCount ?? 0;
+  const topics = br?.modules.module2.topics ?? [];
+  const gaps = br?.modules.module3.gaps ?? [];
+  const totalTopics = topics.length;
+  const totalGaps = gaps.length;
+  const highConfGaps = gaps.filter(g => g.gapScore > 0.5).length;
 
-  const avgCoherence = br && topics && topics.length > 0
+  const avgCoherence = topics.length > 0
     ? topics.reduce((s, t) => s + t.coherence, 0) / topics.length
-    : mockEvaluation.topicCoherence;
-  const topicCoverage = br && topics
-    ? Math.min(1, totalPapers > 0 ? topics.reduce((s, t) => s + t.paperIds.length, 0) / totalPapers : 0.8)
-    : mockEvaluation.topicCoverage;
-  const gapNovelty = br && gaps && gaps.length > 0
+    : 0;
+  const topicCoverage = totalPapers > 0
+    ? Math.min(1, topics.reduce((s, t) => s + t.paperIds.length, 0) / totalPapers)
+    : 0;
+  const gapNovelty = gaps.length > 0
     ? Math.min(1, gaps.reduce((s, g) => s + g.gapScore, 0) / gaps.length)
-    : mockEvaluation.gapNovelty;
-  const modelQuality = br
-    ? +((avgCoherence * 0.4 + topicCoverage * 0.3 + gapNovelty * 0.3)).toFixed(2)
-    : mockEvaluation.modelQuality;
+    : 0;
+  const modelQuality = +((avgCoherence * 0.4 + topicCoverage * 0.3 + gapNovelty * 0.3)).toFixed(2);
 
-  const coherenceByTopic = br && topics
-    ? topics.map((t, i) => ({ topicName: t.name, score: t.coherence, color: TOPIC_COLORS[i % TOPIC_COLORS.length] }))
-    : mockEvaluation.coherenceByTopic.map(c => {
-        const topic = mockTopics.find(t => t.name === c.topicName);
-        return { topicName: c.topicName, score: c.score, color: topic?.color ?? '#6b7280' };
-      });
+  const coherenceByTopic = topics.map((t, i) => ({ topicName: t.name, score: t.coherence, color: TOPIC_COLORS[i % TOPIC_COLORS.length] }));
 
   // Gap score distribution (bucketed 0–1 in 0.2 steps)
-  const gapScoreDist = br && gaps
-    ? [0, 0.2, 0.4, 0.6, 0.8].map(lo => ({
-        range: `${lo.toFixed(1)}–${(lo + 0.2).toFixed(1)}`,
-        count: gaps.filter(g => g.gapScore >= lo && g.gapScore < lo + 0.2).length,
-      }))
-    : mockEvaluation.gapScoreDistribution;
+  const gapScoreDist = [0, 0.2, 0.4, 0.6, 0.8].map(lo => ({
+    range: `${lo.toFixed(1)}–${(lo + 0.2).toFixed(1)}`,
+    count: gaps.filter(g => g.gapScore >= lo && g.gapScore < lo + 0.2).length,
+  }));
 
   return (
     <section id="result-eval" className="mb-12">

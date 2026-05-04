@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect } from 'react';
 import type { AnalysisRun } from '../../../hooks/useAnalysisHistory';
-import type { RunAllResult } from '../../../lib/api';
+import type { BackendPaper, RunAllResult } from '../../../lib/api';
 import DatasetSummarySection from './results/DatasetSummarySection';
 import TopicModelingSection from './results/TopicModelingSection';
 import GapDetectionSection from './results/GapDetectionSection';
@@ -8,11 +8,8 @@ import TrendAnalysisSection from './results/TrendAnalysisSection';
 import ResearchMapResultsSection from './results/ResearchMapResultsSection';
 import ChatResultsSection from './results/ChatResultsSection';
 import EvaluationSummarySection from './results/EvaluationSummarySection';
-import { mockEvaluation } from '../../../mocks/evaluation';
 import { useSnapshots } from '../../../hooks/useSnapshots';
 import SnapshotsPanel from '../components/SnapshotsPanel';
-import { mockTopics } from '../../../mocks/topics';
-import { mockGaps } from '../../../mocks/gaps';
 
 const NAV_ITEMS = [
   { id: 'result-dataset', label: 'Dataset', icon: 'ri-database-2-line' },
@@ -91,7 +88,7 @@ const METHODOLOGY_SECTIONS = [
   },
 ];
 
-function SaveSnapshotModal({ onSave, onClose }: { onSave: (name: string, notes: string) => void; onClose: () => void }) {
+function SaveSnapshotModal({ summary, onSave, onClose }: { summary: { papers: number; topics: number; gaps: number }; onSave: (name: string, notes: string) => void; onClose: () => void }) {
   const [name, setName] = useState(`Analysis ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`);
   const [notes, setNotes] = useState('');
 
@@ -115,9 +112,9 @@ function SaveSnapshotModal({ onSave, onClose }: { onSave: (name: string, notes: 
         {/* Stats preview */}
         <div className="flex gap-2 mb-5">
           {[
-            { label: 'Papers', value: mockEvaluation.totalPapers, color: 'bg-slate-50 text-slate-700' },
-            { label: 'Topics', value: mockEvaluation.totalTopics, color: 'bg-teal-50 text-teal-700' },
-            { label: 'Gaps', value: mockEvaluation.totalGaps, color: 'bg-rose-50 text-rose-600' },
+            { label: 'Papers', value: summary.papers, color: 'bg-slate-50 text-slate-700' },
+            { label: 'Topics', value: summary.topics, color: 'bg-teal-50 text-teal-700' },
+            { label: 'Gaps', value: summary.gaps, color: 'bg-rose-50 text-rose-600' },
           ].map(s => (
             <div key={s.label} className={`flex-1 text-center py-2.5 rounded-xl ${s.color}`}>
               <div className="text-lg font-bold">{s.value}</div>
@@ -264,14 +261,42 @@ function scrollTo(id: string) {
   }
 }
 
-function buildPrintHTML(): string {
-  const topicsRows = mockTopics
-    .map(t => `<tr><td>${t.name}</td><td>${t.keywords.slice(0, 4).join(', ')}</td><td>${t.paperIds.length}</td><td>${(t.coherenceScore * 100).toFixed(0)}%</td><td>${t.trend}</td></tr>`)
+function buildPrintHTML(backendResult?: RunAllResult | null): string {
+  const topics = backendResult?.modules.module2.topics ?? [];
+  const summaries = backendResult?.modules.module1.summaries ?? [];
+  const gaps = backendResult?.modules.module3.gaps ?? [];
+
+  const topicsRows = topics
+    .map(t => {
+      const trendEntry = backendResult?.modules.module4.trends.find(tr => tr.topicId === t.topicId);
+      const paperCount = t.paperIds.length;
+      return `<tr><td>${t.name}</td><td>${t.keywords.slice(0, 4).join(', ')}</td><td>${paperCount}</td><td>${(t.coherence * 100).toFixed(0)}%</td><td>${trendEntry?.trend ?? 'stable'}</td></tr>`;
+    })
     .join('');
-  const gapsRows = [...mockGaps]
+
+  const gapsRows = [...gaps]
     .sort((a, b) => b.gapScore - a.gapScore)
-    .map((g, i) => `<tr><td>#${i + 1}</td><td>${g.topicAName}</td><td>${g.topicBName}</td><td>${g.similarityScore.toFixed(2)}</td><td>${g.coOccurrenceCount}</td><td>${g.gapScore.toFixed(3)}</td></tr>`)
+    .map((g, i) => `<tr><td>#${i + 1}</td><td>${g.topicALabel}</td><td>${g.topicBLabel}</td><td>${g.similarity.toFixed(2)}</td><td>${g.coOccurrence}</td><td>${g.gapScore.toFixed(3)}</td></tr>`)
     .join('');
+
+  const papersCount = backendResult?.papersCount ?? 0;
+  const yearRange = backendResult
+    ? { start: Math.min(...backendResult.modules.module4.trends.flatMap(t => t.yearlyCounts.map(yc => yc.year))), end: Math.max(...backendResult.modules.module4.trends.flatMap(t => t.yearlyCounts.map(yc => yc.year))) }
+    : { start: new Date().getFullYear(), end: new Date().getFullYear() };
+  const qualityScore = backendResult
+    ? (() => {
+        const totalTopics = topics.length;
+        const totalGaps = gaps.length;
+        const avgCoherence = totalTopics > 0 ? topics.reduce((sum, t) => sum + t.coherence, 0) / totalTopics : 0;
+        const coverage = papersCount > 0 ? Math.min(1, topics.reduce((sum, t) => sum + t.paperIds.length, 0) / papersCount) : 0;
+        const novelty = totalGaps > 0 ? Math.min(1, gaps.reduce((sum, g) => sum + g.gapScore, 0) / totalGaps) : 0;
+        return (avgCoherence * 0.4 + coverage * 0.3 + novelty * 0.3);
+      })()
+    : 0;
+  const highConfidenceGaps = gaps.filter(g => g.gapScore > 0.5).length;
+  const topicCoherence = topics.length > 0 ? topics.reduce((sum, t) => sum + t.coherence, 0) / topics.length : 0;
+  const topicCoverage = papersCount > 0 ? Math.min(1, topics.reduce((sum, t) => sum + t.paperIds.length, 0) / papersCount) : 0;
+  const gapNovelty = gaps.length > 0 ? Math.min(1, gaps.reduce((sum, g) => sum + g.gapScore, 0) / gaps.length) : 0;
 
   return `<!DOCTYPE html>
 <html>
@@ -310,25 +335,25 @@ function buildPrintHTML(): string {
 <body>
 <div class="header">
   <h1>ResearchLens — Analysis Report</h1>
-  <p>Generated on ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })} &nbsp;|&nbsp; Dataset: ${mockEvaluation.totalPapers} papers &nbsp;|&nbsp; ${mockEvaluation.yearRange.start}–${mockEvaluation.yearRange.end}</p>
+  <p>Generated on ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })} &nbsp;|&nbsp; Dataset: ${papersCount} papers &nbsp;|&nbsp; ${yearRange.start}–${yearRange.end}</p>
 </div>
 
 <div class="stat-row">
-  <div class="stat-card"><div class="val">${mockEvaluation.totalPapers}</div><div class="lbl">Papers</div></div>
-  <div class="stat-card"><div class="val">${mockEvaluation.totalTopics}</div><div class="lbl">Topics</div></div>
-  <div class="stat-card"><div class="val">${mockEvaluation.totalGaps}</div><div class="lbl">Gaps Found</div></div>
-  <div class="stat-card"><div class="val">${mockEvaluation.highConfidenceGaps}</div><div class="lbl">High-Confidence Gaps</div></div>
-  <div class="stat-card"><div class="val">${(mockEvaluation.modelQuality * 100).toFixed(0)}%</div><div class="lbl">Model Quality</div></div>
+  <div class="stat-card"><div class="val">${papersCount}</div><div class="lbl">Papers</div></div>
+  <div class="stat-card"><div class="val">${topics.length}</div><div class="lbl">Topics</div></div>
+  <div class="stat-card"><div class="val">${gaps.length}</div><div class="lbl">Gaps Found</div></div>
+  <div class="stat-card"><div class="val">${highConfidenceGaps}</div><div class="lbl">High-Confidence Gaps</div></div>
+  <div class="stat-card"><div class="val">${(qualityScore * 100).toFixed(0)}%</div><div class="lbl">Model Quality</div></div>
 </div>
 
 <div class="section">
   <div class="section-title">Model Quality Metrics</div>
   <div class="quality-row">
     ${[
-      { label: 'Topic Coherence', val: mockEvaluation.topicCoherence },
-      { label: 'Topic Coverage', val: mockEvaluation.topicCoverage },
-      { label: 'Gap Novelty', val: mockEvaluation.gapNovelty },
-      { label: 'Overall Quality', val: mockEvaluation.modelQuality },
+      { label: 'Topic Coherence', val: topicCoherence },
+      { label: 'Topic Coverage', val: topicCoverage },
+      { label: 'Gap Novelty', val: gapNovelty },
+      { label: 'Overall Quality', val: qualityScore },
     ].map(m => `<div class="quality-item">
       <div class="quality-label"><span>${m.label}</span><span>${(m.val * 100).toFixed(0)}%</span></div>
       <div class="quality-bar"><div class="quality-fill" style="width:${m.val * 100}%"></div></div>
@@ -363,30 +388,44 @@ function buildPrintHTML(): string {
 }
 
 // ── Share Report helpers ──────────────────────────────────────────────────────
-function buildTextSummary(): string {
-  const topics = mockTopics;
-  const gaps = [...mockGaps].sort((a, b) => b.gapScore - a.gapScore);
+function buildTextSummary(backendResult?: RunAllResult | null): string {
+  const topics = backendResult?.modules.module2.topics ?? [];
+  const gaps = [...(backendResult?.modules.module3.gaps ?? [])].sort((a, b) => b.gapScore - a.gapScore);
   const top3Gaps = gaps.slice(0, 3);
-  const risingTopics = topics.filter(t => t.trend === 'rising');
+  const risingTopics = backendResult?.modules.module4.trends.filter(t => t.trend === 'rising') ?? [];
+  const papers = backendResult?.papersCount ?? 0;
+  const yearRange = backendResult
+    ? { start: Math.min(...backendResult.modules.module4.trends.flatMap(t => t.yearlyCounts.map(yc => yc.year))), end: Math.max(...backendResult.modules.module4.trends.flatMap(t => t.yearlyCounts.map(yc => yc.year))) }
+    : { start: new Date().getFullYear(), end: new Date().getFullYear() };
+  const modelQuality = backendResult
+    ? (() => {
+        const totalTopics = topics.length;
+        const totalGaps = gaps.length;
+        const avgCoherence = totalTopics > 0 ? topics.reduce((sum, t) => sum + t.coherence, 0) / totalTopics : 0;
+        const coverage = papers > 0 ? Math.min(1, topics.reduce((sum, t) => sum + t.paperIds.length, 0) / papers) : 0;
+        const novelty = totalGaps > 0 ? Math.min(1, gaps.reduce((sum, g) => sum + g.gapScore, 0) / totalGaps) : 0;
+        return avgCoherence * 0.4 + coverage * 0.3 + novelty * 0.3;
+      })()
+    : 0;
 
   return [
     '=== ResearchLens — Analysis Report Summary ===',
     `Generated: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`,
     '',
     '── DATASET ─────────────────────────────────',
-    `Papers Analysed : ${mockEvaluation.totalPapers}`,
-    `Topics Detected : ${mockEvaluation.totalTopics}`,
-    `Gaps Identified : ${mockEvaluation.totalGaps}`,
-    `Year Range      : ${mockEvaluation.yearRange.start} – ${mockEvaluation.yearRange.end}`,
-    `Model Quality   : ${(mockEvaluation.modelQuality * 100).toFixed(0)}%`,
+    `Papers Analysed : ${papers}`,
+    `Topics Detected : ${topics.length}`,
+    `Gaps Identified : ${gaps.length}`,
+    `Year Range      : ${yearRange.start} – ${yearRange.end}`,
+    `Model Quality   : ${(modelQuality * 100).toFixed(0)}%`,
     '',
     '── TOP RESEARCH GAPS ───────────────────────',
     ...top3Gaps.map((g, i) =>
-      `#${i + 1}  ${g.topicAName}  ↔  ${g.topicBName}\n     Score: ${g.gapScore.toFixed(3)}  |  Similarity: ${g.similarityScore.toFixed(2)}  |  Co-occurrence: ${g.coOccurrenceCount}`
+      `#${i + 1}  ${g.topicALabel}  ↔  ${g.topicBLabel}\n     Score: ${g.gapScore.toFixed(3)}  |  Similarity: ${g.similarity.toFixed(2)}  |  Co-occurrence: ${g.coOccurrence}`
     ),
     '',
     '── RISING TOPICS ───────────────────────────',
-    ...risingTopics.map(t => `• ${t.name}  (${t.paperIds.length} papers)`),
+    ...risingTopics.map(t => `• ${t.topicName} (${t.yearlyCounts.length} years)`),
     '',
     '── ALL DETECTED TOPICS ─────────────────────',
     ...topics.map(t => `• ${t.name}  [${t.keywords.slice(0, 4).join(', ')}]`),
@@ -400,14 +439,14 @@ function generateShareId(): string {
   return Math.random().toString(36).slice(2, 10).toUpperCase();
 }
 
-function ShareDropdown({ onClose }: { onClose: () => void }) {
+function ShareDropdown({ backendResult, onClose }: { backendResult?: RunAllResult | null; onClose: () => void }) {
   const [textCopied, setTextCopied] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [shareId] = useState(() => generateShareId());
   const shareUrl = `https://researchlens.app/report/${shareId}`;
 
   const copyText = async () => {
-    await navigator.clipboard.writeText(buildTextSummary());
+    await navigator.clipboard.writeText(buildTextSummary(backendResult));
     setTextCopied(true);
     setTimeout(() => { setTextCopied(false); onClose(); }, 1800);
   };
@@ -460,7 +499,7 @@ function ShareDropdown({ onClose }: { onClose: () => void }) {
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
-export default function ResultsSection({ onClose, latestRun, backendResult }: { onClose?: () => void; latestRun?: AnalysisRun | null; backendResult?: RunAllResult | null }) {
+export default function ResultsSection({ onClose, latestRun, backendResult, papers = [] }: { onClose?: () => void; latestRun?: AnalysisRun | null; backendResult?: RunAllResult | null; papers?: BackendPaper[] }) {
   const contentRef = useRef<HTMLDivElement>(null);
   const { addSnapshot } = useSnapshots();
   const [saveModalOpen, setSaveModalOpen] = useState(false);
@@ -483,7 +522,7 @@ export default function ResultsSection({ onClose, latestRun, backendResult }: { 
   }, [shareDropdownOpen]);
 
   const handlePrint = () => {
-    const html = buildPrintHTML();
+    const html = buildPrintHTML(backendResult);
     const blob = new Blob([html], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
     const win = window.open(url, '_blank');
@@ -494,10 +533,10 @@ export default function ResultsSection({ onClose, latestRun, backendResult }: { 
 
   const handleSaveSnapshot = (name: string, notes: string) => {
     addSnapshot(name, {
-      papers: mockEvaluation.totalPapers,
-      topics: mockEvaluation.totalTopics,
-      gaps: mockEvaluation.totalGaps,
-      yearRange: mockEvaluation.yearRange,
+      papers: latestRun?.papers ?? 0,
+      topics: latestRun?.topics ?? 0,
+      gaps: latestRun?.gaps ?? 0,
+      yearRange: latestRun?.yearRange ?? { start: new Date().getFullYear(), end: new Date().getFullYear() },
     }, notes);
     setSaveModalOpen(false);
     setSavedFeedback(true);
@@ -584,7 +623,7 @@ export default function ResultsSection({ onClose, latestRun, backendResult }: { 
                 Share
                 <i className={`ri-arrow-${shareDropdownOpen ? 'up' : 'down'}-s-line text-xs`} />
               </button>
-              {shareDropdownOpen && <ShareDropdown onClose={() => setShareDropdownOpen(false)} />}
+              {shareDropdownOpen && <ShareDropdown backendResult={backendResult} onClose={() => setShareDropdownOpen(false)} />}
             </div>
 
             {/* Print */}
@@ -610,19 +649,19 @@ export default function ResultsSection({ onClose, latestRun, backendResult }: { 
               </div>
               <h1 className="text-2xl font-bold text-gray-900 mb-1">Analysis Results</h1>
               <p className="text-sm text-gray-500">
-                Processed <strong className="text-gray-700">{latestRun?.papers ?? mockEvaluation.totalPapers} papers</strong> &middot;
-                Detected <strong className="text-gray-700">{latestRun?.topics ?? mockEvaluation.totalTopics} topics</strong> &middot;
-                Found <strong className="text-gray-700">{latestRun?.gaps ?? mockEvaluation.totalGaps} research gaps</strong> &middot;
-                {(latestRun?.yearRange ?? mockEvaluation.yearRange).start}–{(latestRun?.yearRange ?? mockEvaluation.yearRange).end}
+                Processed <strong className="text-gray-700">{latestRun?.papers ?? 0} papers</strong> &middot;
+                Detected <strong className="text-gray-700">{latestRun?.topics ?? 0} topics</strong> &middot;
+                Found <strong className="text-gray-700">{latestRun?.gaps ?? 0} research gaps</strong> &middot;
+                {(latestRun?.yearRange ?? { start: new Date().getFullYear(), end: new Date().getFullYear() }).start}–{(latestRun?.yearRange ?? { start: new Date().getFullYear(), end: new Date().getFullYear() }).end}
               </p>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
               <div className="bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2 text-center">
-                <div className="text-lg font-bold text-emerald-700">{((latestRun?.qualityScore ?? mockEvaluation.modelQuality) * 100).toFixed(0)}%</div>
+                <div className="text-lg font-bold text-emerald-700">{((latestRun?.qualityScore ?? 0) * 100).toFixed(0)}%</div>
                 <div className="text-[10px] text-emerald-600 font-medium">Quality Score</div>
               </div>
               <div className="bg-rose-50 border border-rose-100 rounded-lg px-3 py-2 text-center">
-                <div className="text-lg font-bold text-rose-700">{latestRun?.gaps ?? mockEvaluation.highConfidenceGaps}</div>
+                <div className="text-lg font-bold text-rose-700">{latestRun?.gaps ?? 0}</div>
                 <div className="text-[10px] text-rose-600 font-medium">Key Gaps</div>
               </div>
             </div>
@@ -632,12 +671,12 @@ export default function ResultsSection({ onClose, latestRun, backendResult }: { 
 
       {/* Content */}
       <div ref={contentRef} className="max-w-5xl mx-auto px-8 py-10">
-        <DatasetSummarySection backendResult={backendResult} />
+        <DatasetSummarySection backendResult={backendResult} latestRun={latestRun} />
         <TopicModelingSection backendResult={backendResult} />
         <GapDetectionSection backendResult={backendResult} />
         <TrendAnalysisSection backendResult={backendResult} />
         <ResearchMapResultsSection backendResult={backendResult} />
-        <ChatResultsSection backendResult={backendResult} />
+        <ChatResultsSection backendResult={backendResult} papers={papers} />
         <EvaluationSummarySection backendResult={backendResult} />
 
         {/* Footer stamp */}
@@ -649,7 +688,17 @@ export default function ResultsSection({ onClose, latestRun, backendResult }: { 
       </div>
 
       {/* Modals & Panels */}
-      {saveModalOpen && <SaveSnapshotModal onSave={handleSaveSnapshot} onClose={() => setSaveModalOpen(false)} />}
+      {saveModalOpen && (
+        <SaveSnapshotModal
+          summary={{
+            papers: latestRun?.papers ?? 0,
+            topics: latestRun?.topics ?? 0,
+            gaps: latestRun?.gaps ?? 0,
+          }}
+          onSave={handleSaveSnapshot}
+          onClose={() => setSaveModalOpen(false)}
+        />
+      )}
       <MethodologyPanel open={methodologyOpen} onClose={() => setMethodologyOpen(false)} />
       <SnapshotsPanel open={snapshotsPanelOpen} onClose={() => setSnapshotsPanelOpen(false)} />
     </div>

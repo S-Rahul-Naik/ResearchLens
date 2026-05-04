@@ -93,6 +93,7 @@ export default function DashboardPage() {
             onClose={() => setShowResultsOverlay(false)}
             latestRun={currentRun}
             backendResult={currentBackendResult}
+            papers={currentPapers}
           />
         </div>
       )}

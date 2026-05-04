@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { mockTopics } from '../../../../mocks/topics';
-import { mockPapers } from '../../../../mocks/papers';
+
 import type { RunAllResult } from '../../../../lib/api';
 
 const TOPIC_COLORS = ['#0d9488', '#f59e0b', '#8b5cf6', '#e11d48', '#3b82f6', '#ec4899', '#10b981', '#f97316'];
@@ -57,11 +56,7 @@ export default function TopicModelingSection({ backendResult }: { backendResult?
           }),
         };
       })
-    : mockTopics.map(t => ({
-        ...t, id: t.id, coherenceScore: t.coherenceScore,
-        papers: mockPapers.filter(p => t.paperIds.includes(p.id))
-          .map(p => ({ id: p.id, title: p.title, authors: p.authors, year: p.year })),
-      }));
+    : [];
 
   const toggle = (id: string) => setExpandedId(prev => (prev === id ? null : id));
 
