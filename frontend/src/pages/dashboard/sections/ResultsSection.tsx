@@ -499,8 +499,10 @@ function ShareDropdown({ backendResult, onClose }: { backendResult?: RunAllResul
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
-export default function ResultsSection({ onClose, latestRun, backendResult, papers = [] }: { onClose?: () => void; latestRun?: AnalysisRun | null; backendResult?: RunAllResult | null; papers?: BackendPaper[] }) {
+export default function ResultsSection({ onClose, run }: { onClose?: () => void; run?: AnalysisRun | null }) {
   const contentRef = useRef<HTMLDivElement>(null);
+  const backendResult = run?.backendResult ?? null;
+  const papers = run?.backendPapers ?? [];
   const { addSnapshot } = useSnapshots();
   const [saveModalOpen, setSaveModalOpen] = useState(false);
   const [savedFeedback, setSavedFeedback] = useState(false);
@@ -533,10 +535,10 @@ export default function ResultsSection({ onClose, latestRun, backendResult, pape
 
   const handleSaveSnapshot = (name: string, notes: string) => {
     addSnapshot(name, {
-      papers: latestRun?.papers ?? 0,
-      topics: latestRun?.topics ?? 0,
-      gaps: latestRun?.gaps ?? 0,
-      yearRange: latestRun?.yearRange ?? { start: new Date().getFullYear(), end: new Date().getFullYear() },
+      papers: run?.papers ?? 0,
+      topics: run?.topics ?? 0,
+      gaps: run?.gaps ?? 0,
+      yearRange: run?.yearRange ?? { start: new Date().getFullYear(), end: new Date().getFullYear() },
     }, notes);
     setSaveModalOpen(false);
     setSavedFeedback(true);
@@ -649,19 +651,19 @@ export default function ResultsSection({ onClose, latestRun, backendResult, pape
               </div>
               <h1 className="text-2xl font-bold text-gray-900 mb-1">Analysis Results</h1>
               <p className="text-sm text-gray-500">
-                Processed <strong className="text-gray-700">{latestRun?.papers ?? 0} papers</strong> &middot;
-                Detected <strong className="text-gray-700">{latestRun?.topics ?? 0} topics</strong> &middot;
-                Found <strong className="text-gray-700">{latestRun?.gaps ?? 0} research gaps</strong> &middot;
-                {(latestRun?.yearRange ?? { start: new Date().getFullYear(), end: new Date().getFullYear() }).start}–{(latestRun?.yearRange ?? { start: new Date().getFullYear(), end: new Date().getFullYear() }).end}
+                Processed <strong className="text-gray-700">{run?.papers ?? 0} papers</strong> &middot;
+                Detected <strong className="text-gray-700">{run?.topics ?? 0} topics</strong> &middot;
+                Found <strong className="text-gray-700">{run?.gaps ?? 0} research gaps</strong> &middot;
+                {(run?.yearRange ?? { start: new Date().getFullYear(), end: new Date().getFullYear() }).start}–{(run?.yearRange ?? { start: new Date().getFullYear(), end: new Date().getFullYear() }).end}
               </p>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
               <div className="bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2 text-center">
-                <div className="text-lg font-bold text-emerald-700">{((latestRun?.qualityScore ?? 0) * 100).toFixed(0)}%</div>
+                <div className="text-lg font-bold text-emerald-700">{((run?.qualityScore ?? 0) * 100).toFixed(0)}%</div>
                 <div className="text-[10px] text-emerald-600 font-medium">Quality Score</div>
               </div>
               <div className="bg-rose-50 border border-rose-100 rounded-lg px-3 py-2 text-center">
-                <div className="text-lg font-bold text-rose-700">{latestRun?.gaps ?? 0}</div>
+                <div className="text-lg font-bold text-rose-700">{run?.gaps ?? 0}</div>
                 <div className="text-[10px] text-rose-600 font-medium">Key Gaps</div>
               </div>
             </div>
@@ -671,7 +673,7 @@ export default function ResultsSection({ onClose, latestRun, backendResult, pape
 
       {/* Content */}
       <div ref={contentRef} className="max-w-5xl mx-auto px-8 py-10">
-        <DatasetSummarySection backendResult={backendResult} latestRun={latestRun} />
+        <DatasetSummarySection run={run} />
         <TopicModelingSection backendResult={backendResult} />
         <GapDetectionSection backendResult={backendResult} />
         <TrendAnalysisSection backendResult={backendResult} />
@@ -691,9 +693,9 @@ export default function ResultsSection({ onClose, latestRun, backendResult, pape
       {saveModalOpen && (
         <SaveSnapshotModal
           summary={{
-            papers: latestRun?.papers ?? 0,
-            topics: latestRun?.topics ?? 0,
-            gaps: latestRun?.gaps ?? 0,
+            papers: run?.papers ?? 0,
+            topics: run?.topics ?? 0,
+            gaps: run?.gaps ?? 0,
           }}
           onSave={handleSaveSnapshot}
           onClose={() => setSaveModalOpen(false)}

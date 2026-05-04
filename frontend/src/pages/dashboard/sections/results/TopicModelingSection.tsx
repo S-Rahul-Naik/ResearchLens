@@ -40,7 +40,7 @@ export default function TopicModelingSection({ backendResult }: { backendResult?
   const [paperFilter, setPaperFilter] = useState<PaperCountFilter>('all');
   const [trendFilter, setTrendFilter] = useState<'all' | 'rising' | 'stable' | 'declining'>('all');
 
-  // Build DisplayTopic array from backend or mock
+  // Build DisplayTopic array from backend result
   const allTopics: DisplayTopic[] = backendResult
     ? backendResult.modules.module2.topics.map((t, i) => {
         const trendEntry = backendResult.modules.module4.trends.find(tr => tr.topicId === t.topicId);

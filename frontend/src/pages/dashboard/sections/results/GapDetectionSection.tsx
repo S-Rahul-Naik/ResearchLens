@@ -1,10 +1,7 @@
 import { useState } from 'react';
-import { mockGaps } from '../../../../mocks/gaps';
-import { mockPapers } from '../../../../mocks/papers';
-import { mockTopics } from '../../../../mocks/topics';
 import type { RunAllResult } from '../../../../lib/api';
 
-// Unified gap type for display (works with both mock and backend data)
+// Unified gap type for display
 interface GapPaper { id: string; title: string; authors: string[]; year: number; }
 interface DisplayGap {
   id: string; topicAId: string; topicBId: string;
@@ -216,7 +213,7 @@ export default function GapDetectionSection({ backendResult }: { backendResult?:
   const [sortDir, setSortDir] = useState<'desc' | 'asc'>('desc');
   const [filter, setFilter] = useState<GapFilter>('all');
 
-  // Build DisplayGap[] from backend or mock
+  // Build DisplayGap[] from backend result
   const allGaps: DisplayGap[] = backendResult
     ? (() => {
         const summaries = backendResult.modules.module1.summaries;
@@ -247,25 +244,7 @@ export default function GapDetectionSection({ backendResult }: { backendResult?:
           } satisfies DisplayGap;
         });
       })()
-    : mockGaps.map(g => {
-        const topicA = mockTopics.find(t => t.id === g.topicAId);
-        const topicB = mockTopics.find(t => t.id === g.topicBId);
-        return {
-          id: g.id, topicAId: g.topicAId, topicBId: g.topicBId,
-          topicAName: g.topicAName, topicBName: g.topicBName,
-          topicAKeywords: g.topicAKeywords, topicBKeywords: g.topicBKeywords,
-          topicAColor: topicA?.color ?? '#0d9488',
-          topicBColor: topicB?.color ?? '#e11d48',
-          similarityScore: g.similarityScore, coOccurrenceCount: g.coOccurrenceCount, gapScore: g.gapScore,
-          papersA: mockPapers.filter(p => g.paperIdsInA.includes(p.id))
-            .map(p => ({ id: p.id, title: p.title, authors: p.authors, year: p.year })),
-          papersB: mockPapers.filter(p => g.paperIdsInB.includes(p.id))
-            .map(p => ({ id: p.id, title: p.title, authors: p.authors, year: p.year })),
-          papersBridging: mockPapers.filter(p => g.paperIdsBridging.includes(p.id))
-            .map(p => ({ id: p.id, title: p.title, authors: p.authors, year: p.year })),
-          explanation: g.explanation,
-        };
-      });
+    : [];
 
   const avgScore = allGaps.length > 0
     ? allGaps.reduce((s, g) => s + g.gapScore, 0) / allGaps.length

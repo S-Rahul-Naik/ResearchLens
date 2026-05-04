@@ -1,18 +1,18 @@
 import type { RunAllResult } from '../../../../lib/api';
 import type { AnalysisRun } from '../../../../hooks/useAnalysisHistory';
 
-export default function DatasetSummarySection({ backendResult, latestRun }: { backendResult?: RunAllResult | null; latestRun?: AnalysisRun | null }) {
-  const br = backendResult;
-  const papersCount = br?.papersCount ?? latestRun?.papers ?? 0;
+export default function DatasetSummarySection({ run }: { run?: AnalysisRun | null }) {
+  const br = run?.backendResult;
+  const papersCount = br?.papersCount ?? run?.papers ?? 0;
   const topics = br?.modules.module2.topics ?? [];
-  const topicsCount = topics.length || (latestRun?.topics ?? 0);
+  const topicsCount = topics.length || (run?.topics ?? 0);
   const gaps = br?.modules.module3.gaps ?? [];
-  const gapsCount = gaps.length || (latestRun?.gaps ?? 0);
+  const gapsCount = gaps.length || (run?.gaps ?? 0);
 
   const allYears = br
     ? br.modules.module4.trends.flatMap(t => t.yearlyCounts.map(yc => yc.year))
-    : latestRun
-      ? [latestRun.yearRange.start, latestRun.yearRange.end]
+    : run
+      ? [run.yearRange.start, run.yearRange.end]
       : [];
   const yearRange = allYears.length > 0
     ? { start: Math.min(...allYears), end: Math.max(...allYears) }
@@ -35,7 +35,7 @@ export default function DatasetSummarySection({ backendResult, latestRun }: { ba
     : 0;
   const modelQuality = br
     ? +((avgCoherence * 0.4 + topicCoverage * 0.3 + gapNovelty * 0.3)).toFixed(2)
-    : latestRun?.qualityScore ?? 0;
+    : run?.qualityScore ?? 0;
 
   const processingTimeMs = 0;
   const avgPapersPerTopic = topics.length > 0

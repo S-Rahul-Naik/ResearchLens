@@ -22,8 +22,6 @@ export default function DashboardPage() {
   const [showResultsOverlay, setShowResultsOverlay] = useState(false);
   const [historyPanelOpen, setHistoryPanelOpen] = useState(false);
   const [currentRun, setCurrentRun] = useState<AnalysisRun | null>(null);
-  const [currentBackendResult, setCurrentBackendResult] = useState<RunAllResult | null>(null);
-  const [currentPapers, setCurrentPapers] = useState<BackendPaper[]>([]);
 
   const { runs, addRun, removeRun, clearAll, sessionRunCount } = useAnalysisHistory();
   const latestRun = runs[0] ?? null;
@@ -43,11 +41,9 @@ export default function DashboardPage() {
     return <Navigate to="/signin" replace />;
   }
 
-  const handleShowResults = (runData: Omit<AnalysisRun, 'id' | 'timestamp'>, backendResult: RunAllResult | null, papers: BackendPaper[] = []) => {
+  const handleShowResults = (runData: Omit<AnalysisRun, 'id' | 'timestamp'>) => {
     const saved = addRun(runData);
     setCurrentRun(saved);
-    setCurrentBackendResult(backendResult);
-    setCurrentPapers(papers);
     setShowResultsOverlay(true);
   };
 
@@ -61,12 +57,12 @@ export default function DashboardPage() {
     switch (section) {
       case 'overview': return <OverviewSection onNavigate={setSection} latestRun={latestRun} />;
       case 'datasets': return <DatasetsSection onShowResults={handleShowResults} />;
-      case 'gaps': return <GapsSection backendResult={currentBackendResult} papers={currentPapers} />;
-      case 'topics': return <TopicsSection backendResult={currentBackendResult} papers={currentPapers} />;
-      case 'trends': return <TrendsSection backendResult={currentBackendResult} papers={currentPapers} />;
-      case 'map': return <MapSection backendResult={currentBackendResult} papers={currentPapers} />;
-      case 'chatbot': return <ChatbotSection papers={currentPapers} backendResult={currentBackendResult} />;
-      case 'evaluation': return <EvaluationSection backendResult={currentBackendResult} papers={currentPapers} />;
+      case 'gaps': return <GapsSection backendResult={currentRun?.backendResult} papers={currentRun?.backendPapers ?? []} />;
+      case 'topics': return <TopicsSection backendResult={currentRun?.backendResult} papers={currentRun?.backendPapers ?? []} />;
+      case 'trends': return <TrendsSection backendResult={currentRun?.backendResult} papers={currentRun?.backendPapers ?? []} />;
+      case 'map': return <MapSection backendResult={currentRun?.backendResult} papers={currentRun?.backendPapers ?? []} />;
+      case 'chatbot': return <ChatbotSection papers={currentRun?.backendPapers ?? []} backendResult={currentRun?.backendResult} />;
+      case 'evaluation': return <EvaluationSection backendResult={currentRun?.backendResult} papers={currentRun?.backendPapers ?? []} />;
       default: return <OverviewSection onNavigate={setSection} latestRun={latestRun} />;
     }
   };
@@ -91,9 +87,7 @@ export default function DashboardPage() {
         <div className="fixed inset-0 z-50 bg-[#f8f9fb] overflow-y-auto">
           <ResultsSection
             onClose={() => setShowResultsOverlay(false)}
-            latestRun={currentRun}
-            backendResult={currentBackendResult}
-            papers={currentPapers}
+            run={currentRun}
           />
         </div>
       )}

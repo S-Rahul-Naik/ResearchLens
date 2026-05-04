@@ -179,7 +179,7 @@ function bulkExportCSV(papers: Paper[]) {
 
 /* ─── Main Component ─────────────────────────────────────── */
 interface DatasetsSectionProps {
-  onShowResults?: (run: Omit<AnalysisRun, 'id' | 'timestamp'>, backendResult: RunAllResult | null, papers: BackendPaper[]) => void;
+  onShowResults?: (run: Omit<AnalysisRun, 'id' | 'timestamp'>) => void;
 }
 
 export default function DatasetsSection({ onShowResults }: DatasetsSectionProps) {
@@ -193,7 +193,7 @@ export default function DatasetsSection({ onShowResults }: DatasetsSectionProps)
   const [selectedPaper, setSelectedPaper] = useState<Paper | null>(null);
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
   const [showPipeline, setShowPipeline] = useState(false);
-  const [latestRunData, setLatestRunData] = useState<Omit<AnalysisRun, 'id' | 'timestamp'> | null>(null);
+  const [latestRunData, setLatestRunData] = useState<(Omit<AnalysisRun, 'id' | 'timestamp'>) | null>(null);
   const [runName, setRunName] = useState('');
   const [processedTopics, setProcessedTopics] = useState<TopicResult[]>([]);
   const [processedGaps, setProcessedGaps] = useState<GapResult[]>([]);
@@ -420,48 +420,46 @@ export default function DatasetsSection({ onShowResults }: DatasetsSectionProps)
     setProcessDone(true);
     setShowResults(true);
 
-    // Build run data from backend result if available, else fall back to mock data
-    const topTopics = topics.length
-      ? topics.slice(0, 3).map(t => t.name)
-      : mockTopics.slice(0, 3).map(t => t.name);
+    // Build run data from the backend result only
+    const topTopics = topics.slice(0, 3).map(t => t.name);
     const topGap = gaps.length
       ? `${gaps[0].topicALabel} ↔ ${gaps[0].topicBLabel}`
-      : mockGaps.length > 0
-        ? `${mockGaps[0].topicAName} ↔ ${mockGaps[0].topicBName}`
-        : 'No gaps detected';
+      : 'No gaps detected';
 
     const years = papers.map(p => p.year);
     const yearRange = years.length
       ? { start: Math.min(...years), end: Math.max(...years) }
-      : mockEvaluation.yearRange;
+      : { start: new Date().getFullYear(), end: new Date().getFullYear() };
 
     const avgCoherence = topics.length
       ? topics.reduce((sum, t) => sum + t.coherence, 0) / topics.length
-      : mockEvaluation.modelQuality;
+      : 0;
 
     const elapsedMs = backendResult
-      ? new Date(backendResult.createdAt).getTime() - Date.now()
-      : mockEvaluation.processingTimeMs;
+      ? Math.max(0, Date.now() - new Date(backendResult.createdAt).getTime())
+      : 0;
 
+    const paperList: BackendPaper[] = papers.map(p => ({
+      id: p.id,
+      title: p.title,
+      authors: Array.isArray(p.authors) ? p.authors : [],
+      year: Number(p.year) || 0,
+      abstract: String(p.abstract || ''),
+    }));
     const runData: Omit<AnalysisRun, 'id' | 'timestamp'> = {
       name: runName.trim() || `Analysis Run — ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`,
       papers: papers.length,
-      topics: topics.length || mockTopics.length,
-      gaps: gaps.length || mockGaps.length,
+      topics: topics.length,
+      gaps: gaps.length,
       yearRange,
       topTopics,
       topGap,
       qualityScore: Number(avgCoherence.toFixed(2)),
-      processingTime: `${(Math.abs(elapsedMs) / 1000).toFixed(1)}s`,
+      processingTime: `${(elapsedMs / 1000).toFixed(1)}s`,
+      backendResult,
+      backendPapers: paperList,
     };
-    const backendPapers: BackendPaper[] = papers.map(p => ({
-      id: p.id,
-      title: p.title,
-      authors: p.authors ?? [],
-      year: p.year ?? 0,
-      abstract: p.abstract ?? '',
-    }));
-    if (onShowResults) onShowResults(runData, backendResult, backendPapers);
+    if (onShowResults) onShowResults(runData);
     setLatestRunData(runData);
   }, [papers, runName, onShowResults]);
 
@@ -776,7 +774,7 @@ export default function DatasetsSection({ onShowResults }: DatasetsSectionProps)
           <div className="px-6 py-3.5 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
             <p className="text-xs text-gray-400">Processing complete — click to explore the full interactive report</p>
             <button
-              onClick={() => latestRunData && onShowResults && onShowResults(latestRunData, null, [])}
+              onClick={() => latestRunData && onShowResults && onShowResults(latestRunData)}
               className="whitespace-nowrap flex items-center gap-1.5 px-4 py-2 bg-[#0f766e] text-white text-xs font-medium rounded-lg hover:bg-[#0d6b62] transition-colors cursor-pointer"
             >
               <i className="ri-file-chart-line" />

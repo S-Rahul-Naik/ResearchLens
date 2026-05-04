@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
+import type { BackendPaper, RunAllResult } from '../lib/api';
 
 export interface AnalysisRun {
   id: string;
@@ -13,6 +14,8 @@ export interface AnalysisRun {
   qualityScore: number;
   processingTime: string;
   notes?: string;
+  backendResult?: RunAllResult | null;
+  backendPapers?: BackendPaper[];
 }
 
 const STORAGE_KEY = 'rl_analysis_history';
