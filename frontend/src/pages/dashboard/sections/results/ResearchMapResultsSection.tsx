@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { RunAllResult } from '../../../../lib/api';
+import type { PointResult, RunAllResult } from '../../../../lib/api';
 
 const TOPIC_COLORS = ['#0d9488', '#f59e0b', '#8b5cf6', '#e11d48', '#3b82f6', '#ec4899', '#10b981', '#f97316'];
 
@@ -100,30 +100,58 @@ export default function ResearchMapResultsSection({ backendResult }: { backendRe
       topicNameMap.set(t.topicId, t.name);
     });
 
-    return br.modules.module5.map.points.map(p => ({
-      paperId: p.paperId,
-      title: p.title,
-      x: p.x,
-      y: p.y,
-      topicId: p.topicId,
-      topicName: topicNameMap.get(p.topicId) ?? p.topicId,
-      color: topicColorMap.get(p.topicId) ?? '#6b7280',
-      year: p.year ?? new Date().getFullYear(),
-    }));
+    return br.modules.module5.map.points.map((p) => {
+      const point = p as PointResult & { year?: number };
+      return {
+        paperId: point.paperId,
+        title: point.title,
+        x: point.x,
+        y: point.y,
+        topicId: point.topicId,
+        topicName: topicNameMap.get(point.topicId) ?? point.topicId,
+        color: topicColorMap.get(point.topicId) ?? '#6b7280',
+        year: point.year ?? new Date().getFullYear(),
+      };
+    });
   }, [br]);
+
+  const normalizedPoints = useMemo(() => {
+    if (adaptedPoints.length === 0) return [];
+
+    const xs = adaptedPoints.map((p) => p.x);
+    const ys = adaptedPoints.map((p) => p.y);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+    const rangeX = maxX - minX || 1;
+    const rangeY = maxY - minY || 1;
+    const padding = 48;
+    const width = CANVAS_W - padding * 2;
+    const height = CANVAS_H - padding * 2;
+
+    return adaptedPoints.map((p) => ({
+      ...p,
+      x: padding + ((p.x - minX) / rangeX) * width,
+      y: padding + ((p.y - minY) / rangeY) * height,
+    }));
+  }, [adaptedPoints]);
 
   const adaptedGaps = useMemo(() => {
     if (!br) return [];
 
-    return br.modules.module5.map.links.map((link, i) => ({
-      id: `gap-${i}`,
-      topicAId: link.topicA,
-      topicBId: link.topicB,
-      topicAName: br.modules.module2.topics.find(t => t.topicId === link.topicA)?.name ?? link.topicA,
-      topicBName: br.modules.module2.topics.find(t => t.topicId === link.topicB)?.name ?? link.topicB,
-      gapScore: 0.85,
-      explanation: `Gap between ${br.modules.module2.topics.find(t => t.topicId === link.topicA)?.name ?? link.topicA} and ${br.modules.module2.topics.find(t => t.topicId === link.topicB)?.name ?? link.topicB}.`,
-    }));
+    return br.modules.module5.map.links.map((link, i) => {
+      const mapLink = link as { sourceTopicId: string; targetTopicId: string };
+      return {
+        id: `gap-${i}`,
+        topicAId: mapLink.sourceTopicId,
+        topicBId: mapLink.targetTopicId,
+        topicAName: br.modules.module2.topics.find(t => t.topicId === mapLink.sourceTopicId)?.name ?? mapLink.sourceTopicId,
+        topicBName: br.modules.module2.topics.find(t => t.topicId === mapLink.targetTopicId)?.name ?? mapLink.targetTopicId,
+        gapScore: 0.85,
+        explanation: `Gap between ${br.modules.module2.topics.find(t => t.topicId === mapLink.sourceTopicId)?.name ?? mapLink.sourceTopicId} and ${br.modules.module2.topics.find(t => t.topicId === mapLink.targetTopicId)?.name ?? mapLink.targetTopicId}.`,
+      };
+    });
   }, [br]);
 
   const allTopicIds = useMemo(() => {
@@ -143,14 +171,14 @@ export default function ResearchMapResultsSection({ backendResult }: { backendRe
 
   const centroids = useMemo(() => {
     return allTopicIds
-      .map((id) => getCentroid(id, adaptedPoints))
+      .map((id) => getCentroid(id, normalizedPoints))
       .filter((c): c is Centroid => c !== null);
-  }, [allTopicIds, adaptedPoints]);
+  }, [allTopicIds, normalizedPoints]);
 
   // Topic halos
   const topicHalos = useMemo(() => {
     return centroids.map((c) => {
-      const pts = adaptedPoints.filter((p) => p.topicId === c.topicId);
+      const pts = normalizedPoints.filter((p) => p.topicId === c.topicId);
       const maxDist = Math.max(
         ...pts.map((p) =>
           Math.sqrt((p.x - c.x) ** 2 + (p.y - c.y) ** 2)
@@ -159,7 +187,7 @@ export default function ResearchMapResultsSection({ backendResult }: { backendRe
       );
       return { ...c, radius: maxDist + 28 };
     });
-  }, [centroids, adaptedPoints]);
+  }, [centroids, normalizedPoints]);
 
   const activeGap = useMemo(() => {
     if (!hoveredGap) return null;
@@ -438,7 +466,7 @@ export default function ResearchMapResultsSection({ backendResult }: { backendRe
             })}
 
             {/* Paper dots */}
-            {adaptedPoints.map((pt, idx) => {
+            {normalizedPoints.map((pt, idx) => {
               const topicHovered = hoveredTopic === pt.topicId;
               const topicDimmed = hoveredTopic && !topicHovered;
               const gapHovered = activeGap

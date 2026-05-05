@@ -43,10 +43,13 @@ async function callOllama(prompt) {
       },
       { timeout: 60000 }
     );
-    
-    if (response.data && response.data.response) {
-      return response.data.response.trim();
+
+    const text = response?.data?.response ?? response?.data?.choices?.[0]?.text;
+    if (text && typeof text === 'string') {
+      return text.trim();
     }
+
+    console.error('Ollama API Error: unexpected response body', JSON.stringify(response.data));
     throw new Error('No response from Ollama');
   } catch (error) {
     console.error('Ollama API Error:', error.message);
