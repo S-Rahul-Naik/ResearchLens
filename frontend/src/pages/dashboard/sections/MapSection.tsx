@@ -1,9 +1,4 @@
 import { useMemo, useState, useRef } from 'react';
-import { mockMapPoints } from '../../../mocks/mapData';
-import { mockTopics } from '../../../mocks/topics';
-import { mockPapers } from '../../../mocks/papers';
-import { mockGaps } from '../../../mocks/gaps';
-import { mockCitations } from '../../../mocks/citations';
 import type { RunAllResult, BackendPaper } from '../../../lib/api';
 
 const W = 720;
@@ -20,7 +15,7 @@ type MapPoint = {
 };
 type AdaptedGap = {
   id: string; topicAId: string; topicBId: string; topicAName: string; topicBName: string;
-  gapScore: number; coOccurrenceCount: number; similarityScore: number;
+  gapScore: number; coOccurrenceCount: number; similarityScore: number; rank: number;
 };
 type AdaptedTopic = { id: string; name: string; color: string; paperIds: string[] };
 
@@ -47,7 +42,7 @@ export default function MapSection({ backendResult, papers: propPapers = [] }: {
         paperIds: t.paperIds,
       }));
     }
-    return mockTopics.map(t => ({ id: t.id, name: t.name, color: t.color, paperIds: t.paperIds }));
+    return [];
   }, [backendResult]);
 
   const allMapPoints: MapPoint[] = useMemo(() => {
@@ -66,44 +61,30 @@ export default function MapSection({ backendResult, papers: propPapers = [] }: {
         year: paperYearMap.get(p.paperId) ?? 2020,
       }));
     }
-    return mockMapPoints.map(p => ({
-      paperId: p.paperId ?? p.id,
-      topicId: p.topicId,
-      topicName: p.topicName,
-      x: p.x,
-      y: p.y,
-      color: p.color,
-      title: p.title,
-      year: p.year,
-    }));
+    return [];
   }, [backendResult, allTopics, propPapers]);
 
   const allGaps: AdaptedGap[] = useMemo(() => {
     if (backendResult) {
-      return backendResult.modules.module3.gaps.map(g => ({
-        id: g.gapId,
-        topicAId: g.topicA,
-        topicBId: g.topicB,
-        topicAName: g.topicALabel,
-        topicBName: g.topicBLabel,
-        gapScore: g.gapScore,
-        coOccurrenceCount: g.coOccurrence,
-        similarityScore: g.similarity,
-      }));
+      return backendResult.modules.module3.gaps
+        .map(g => ({
+          id: g.gapId,
+          topicAId: g.topicA,
+          topicBId: g.topicB,
+          topicAName: g.topicALabel,
+          topicBName: g.topicBLabel,
+          gapScore: g.gapScore,
+          coOccurrenceCount: g.coOccurrence,
+          similarityScore: g.similarity,
+        }))
+        .sort((a, b) => b.gapScore - a.gapScore)
+        .map((gap, index) => ({ ...gap, rank: index + 1 }));
     }
-    return mockGaps.map(g => ({
-      id: g.id,
-      topicAId: g.topicAId,
-      topicBId: g.topicBId,
-      topicAName: g.topicAName,
-      topicBName: g.topicBName,
-      gapScore: g.gapScore,
-      coOccurrenceCount: g.coOccurrenceCount,
-      similarityScore: g.similarityScore,
-    }));
+    return [];
   }, [backendResult]);
 
-  const allPapers = propPapers.length > 0 ? propPapers : mockPapers;
+  const citationEdges: Array<{ from: string; to: string }> = [];
+  const allPapers = propPapers;
 
   /* ── Export helpers ──────────────────────────────── */
   function triggerExport(format: 'dot' | 'json') {
@@ -119,7 +100,7 @@ export default function MapSection({ backendResult, papers: propPapers = [] }: {
         lines.push(`  "${pt.paperId}" [label="${label}\\n(${pt.year})" fillcolor="#${color}33" color="#${color}"];`);
       });
       lines.push('');
-      mockCitations.forEach(c => { lines.push(`  "${c.from}" -> "${c.to}";`); });
+      // No citation data available for export when using live backend-only mode.
       lines.push('}');
       const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
       const url = URL.createObjectURL(blob);
@@ -127,7 +108,7 @@ export default function MapSection({ backendResult, papers: propPapers = [] }: {
       URL.revokeObjectURL(url);
     } else {
       const nodes = allMapPoints.map(pt => ({ data: { id: pt.paperId, label: pt.title, year: pt.year, topic: pt.topicId } }));
-      const edges = mockCitations.map((c, i) => ({ data: { id: `e${i}`, source: c.from, target: c.to } }));
+      const edges: Array<{ data: { id: string; source: string; target: string } }> = [];
       const blob = new Blob([JSON.stringify({ nodes, edges }, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a'); a.href = url; a.download = 'researchlens_citations.json'; a.click();
@@ -195,16 +176,14 @@ export default function MapSection({ backendResult, papers: propPapers = [] }: {
 
   /* ── Citation edges for the selected/hovered paper ─── */
   const activePaperId = selectedPoint?.paperId ?? hoveredPaper?.paperId ?? null;
-  const outgoingCitations = activePaperId ? mockCitations.filter(c => c.from === activePaperId) : [];
-  const incomingCitations = activePaperId ? mockCitations.filter(c => c.to === activePaperId) : [];
+  const outgoingCitations: Array<{ from: string; to: string }> = [];
+  const incomingCitations: Array<{ from: string; to: string }> = [];
 
   const visiblePoints = allMapPoints.filter(p => !hiddenTopics.has(p.topicId));
   const filteredGaps = allGaps.filter(g => g.gapScore >= filterGapScore);
   const hoveredGap = hoveredGapId ? allGaps.find(g => g.id === hoveredGapId) : null;
   const selectedPaper = selectedPoint
-    ? (propPapers.length > 0
-        ? propPapers.find(p => p.id === selectedPoint.paperId)
-        : (mockPapers as { id: string; title: string; authors: string[]; year: number; abstract: string }[]).find(p => p.id === selectedPoint.paperId))
+    ? propPapers.find(p => p.id === selectedPoint.paperId) ?? null
     : null;
 
   /* ── Stats ─────────────────────────────────────────── */
@@ -215,9 +194,7 @@ export default function MapSection({ backendResult, papers: propPapers = [] }: {
 
   /* ── Citation graph helpers ─────────────────────────── */
   const citationInDegree = useMemo(() => {
-    const map = new Map<string, number>();
-    mockCitations.forEach(c => { map.set(c.to, (map.get(c.to) ?? 0) + 1); });
-    return map;
+    return new Map<string, number>();
   }, []);
 
   const maxInDegree = Math.max(...Array.from(citationInDegree.values()), 1);
@@ -280,7 +257,7 @@ export default function MapSection({ backendResult, papers: propPapers = [] }: {
           { icon: 'ri-focus-3-line', label: 'Papers', value: allMapPoints.length, color: 'text-teal-600', bg: 'bg-teal-50' },
           { icon: 'ri-price-tag-3-line', label: 'Topics', value: allTopics.length, color: 'text-violet-600', bg: 'bg-violet-50' },
           { icon: 'ri-git-branch-line', label: 'Gaps', value: allGaps.length, color: 'text-amber-600', bg: 'bg-amber-50' },
-          { icon: 'ri-node-tree', label: 'Citations', value: mockCitations.length, color: 'text-sky-600', bg: 'bg-sky-50' },
+          { icon: 'ri-node-tree', label: 'Citations', value: citationEdges.length, color: 'text-sky-600', bg: 'bg-sky-50' },
         ].map(s => (
           <div key={s.label} className="bg-white rounded-xl border border-gray-100 px-4 py-3 flex items-center gap-3">
             <div className={`w-9 h-9 flex items-center justify-center rounded-xl ${s.bg} ${s.color} flex-shrink-0`}>
@@ -537,23 +514,8 @@ export default function MapSection({ backendResult, papers: propPapers = [] }: {
                 {viewMode === 'citation' && (
                   <>
                     {/* All citation edges (dimmed background) */}
-                    {mockCitations.map(c => {
-                      const from = paperPositions.get(c.from);
-                      const to = paperPositions.get(c.to);
-                      if (!from || !to) return null;
-
-                      // If we have an active paper, only show its edges in full color
-                      if (activePaperId) {
-                        if (c.from === activePaperId) {
-                          return <ArrowLine key={`cite-${c.from}-${c.to}`} fromId={c.from} toId={c.to} color="#0ea5e9" opacity={0.9} />;
-                        }
-                        if (c.to === activePaperId) {
-                          return <ArrowLine key={`cite-${c.from}-${c.to}`} fromId={c.from} toId={c.to} color="#f43f5e" opacity={0.9} />;
-                        }
-                        return <ArrowLine key={`cite-${c.from}-${c.to}`} fromId={c.from} toId={c.to} color="#94a3b8" opacity={0.15} />;
-                      }
-                      return <ArrowLine key={`cite-${c.from}-${c.to}`} fromId={c.from} toId={c.to} color="#94a3b8" opacity={0.5} />;
-                    })}
+                    {[]
+                      .map(c => null)}
 
                     {/* Paper dots sized by in-degree */}
                     {Array.from(paperPositions.entries()).map(([pid, pos]) => {
@@ -602,7 +564,7 @@ export default function MapSection({ backendResult, papers: propPapers = [] }: {
                     {hoveredPaper && (() => {
                       const pos = paperPositions.get(hoveredPaper.paperId);
                       if (!pos) return null;
-                      const outDeg = mockCitations.filter(c => c.from === hoveredPaper.paperId).length;
+                      const outDeg = 0;
                       const inDeg = citationInDegree.get(hoveredPaper.paperId) ?? 0;
                       const title = hoveredPaper.title.length > 40 ? hoveredPaper.title.slice(0, 40) + '…' : hoveredPaper.title;
                       const tx = pos.cx > W - 200 ? pos.cx - 205 : pos.cx + 12;
@@ -655,22 +617,7 @@ export default function MapSection({ backendResult, papers: propPapers = [] }: {
           {viewMode === 'citation' && (
             <div className="bg-white rounded-2xl border border-gray-100 p-4">
               <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Most Cited</h4>
-              <div className="space-y-1.5">
-                {[...Array.from(citationInDegree.entries())]
-                  .sort((a, b) => b[1] - a[1])
-                  .slice(0, 6)
-                  .map(([pid, deg]) => {
-                    const pt = allMapPoints.find(p => p.paperId === pid);
-                    if (!pt) return null;
-                    const short = pt.title.length > 30 ? pt.title.slice(0, 30) + '…' : pt.title;
-                    return (
-                      <div key={pid} className="flex items-center gap-2">
-                        <span className="w-4 h-4 flex items-center justify-center rounded-full text-[9px] font-bold text-white flex-shrink-0" style={{ backgroundColor: pt.color }}>{deg}</span>
-                        <span className="text-[10px] text-gray-600 truncate flex-1">{short}</span>
-                      </div>
-                    );
-                  })}
-              </div>
+              <div className="text-[10px] text-gray-500">Citation information is not available for live backend-only data.</div>
             </div>
           )}
 
@@ -709,7 +656,7 @@ export default function MapSection({ backendResult, papers: propPapers = [] }: {
               {viewMode === 'citation' && (
                 <div className="flex gap-2 mb-2">
                   <span className="text-[9px] bg-sky-50 text-sky-700 px-2 py-0.5 rounded-full font-semibold">
-                    Cites {mockCitations.filter(c => c.from === selectedPaper.id).length}
+                    Cites {outgoingCitations.length}
                   </span>
                   <span className="text-[9px] bg-rose-50 text-rose-700 px-2 py-0.5 rounded-full font-semibold">
                     Cited by {citationInDegree.get(selectedPaper.id) ?? 0}
@@ -769,7 +716,7 @@ export default function MapSection({ backendResult, papers: propPapers = [] }: {
           <span className="text-xs text-gray-500">
             Directed arrows show citation relationships between papers. <strong>Dot size scales with in-degree</strong> (how many papers cite it).
             The white number inside large dots = citation count received. Hover or click any dot to isolate its citation network.
-            Total citation edges: <strong>{mockCitations.length}</strong>.
+            Total citation edges: <strong>{citationEdges.length}</strong>.
           </span>
         )}
       </div>
