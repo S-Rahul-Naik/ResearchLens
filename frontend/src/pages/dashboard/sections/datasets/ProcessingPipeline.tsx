@@ -80,6 +80,18 @@ const STAGES = [
     ring: 'ring-rose-400',
     desc: 'Gap scoring & ranking',
   },
+  {
+    id: 5,
+    label: 'Backend Analysis',
+    short: 'Backend',
+    icon: 'ri-server-line',
+    color: '#2563eb',
+    bg: 'bg-sky-50',
+    text: 'text-sky-700',
+    border: 'border-sky-200',
+    ring: 'ring-sky-400',
+    desc: 'Waiting for backend result',
+  },
 ];
 
 /* ─── Log message pool ───────────────────────────────────── */
@@ -118,6 +130,13 @@ const LOG_MSGS: Record<number, string[]> = {
     'Ranking by gap score…',
     'Gap detection complete ✓',
   ],
+  5: [
+    'Sending corpus to backend…',
+    'Waiting for backend analysis…',
+    'Collecting module results…',
+    'Finalizing backend output…',
+    'Backend analysis complete ✓',
+  ],
 };
 
 function nowStr() {
@@ -125,10 +144,10 @@ function nowStr() {
 }
 
 function initProgress(papers: Paper[]): PaperProgress[] {
-  return papers.map(p => ({
-    paperId: p.id,
-    title: p.title,
-    stages: Array(5).fill('waiting') as StageStatus[],
+  return papers.map((paper) => ({
+    paperId: paper.id,
+    title: paper.title,
+    stages: Array(STAGES.length).fill('waiting') as StageStatus[],
   }));
 }
 
@@ -143,8 +162,7 @@ function StageDot({ status, stage }: { status: StageStatus; stage: typeof STAGES
   }
   if (status === 'running') {
     return (
-      <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full bg-white border-2 flex-shrink-0 ${stage.border}`}
-        style={{ boxShadow: `0 0 0 3px ${stage.color}22` }}>
+      <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full bg-white border-2 flex-shrink-0 ${stage.border}`} style={{ boxShadow: `0 0 0 3px ${stage.color}22` }}>
         <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: stage.color }} />
       </span>
     );
@@ -162,6 +180,7 @@ function StageDot({ status, stage }: { status: StageStatus; stage: typeof STAGES
     </span>
   );
 }
+
 
 /* ─── Props ─────────────────────────────────────────────── */
 interface Props {
@@ -183,6 +202,7 @@ export default function ProcessingPipeline({ papers, runName, onComplete, onCanc
   const cancelRef = useRef(false);
   const startTimeRef = useRef<number>(Date.now());
   const backendResultRef = useRef<RunAllResult | null>(null);
+  const backendPromiseRef = useRef<Promise<RunAllResult | null> | null>(null);
 
   const addLog = useCallback((text: string, level: LogEntry['level'] = 'info') => {
     setLog(prev => {
@@ -206,16 +226,18 @@ export default function ProcessingPipeline({ papers, runName, onComplete, onCanc
         authors: p.authors,
         year: p.year,
         abstract: p.abstract,
-        content: p.abstract,
+        content: (p as any).content ?? p.abstract,
       })),
       question: 'What are the key findings, research gaps and emerging topics?',
     };
-    runAllModules(backendPayload)
+    backendPromiseRef.current = runAllModules(backendPayload)
       .then((result) => {
         backendResultRef.current = result;
+        return result;
       })
       .catch(() => {
         backendResultRef.current = null;
+        return null;
       });
 
     const run = async () => {
@@ -273,16 +295,26 @@ export default function ProcessingPipeline({ papers, runName, onComplete, onCanc
         addLog('Topic coherence scores computed', 'success');
         await new Promise(r => setTimeout(r, 400));
         addLog('Research gaps re-scored and ranked', 'success');
-        // Wait for backend result up to 10s before completing
-        const deadline = Date.now() + 10_000;
-        while (backendResultRef.current === null && Date.now() < deadline) {
-          await new Promise(r => setTimeout(r, 200));
-        }
-        if (backendResultRef.current) {
-          addLog('Backend analysis complete — ' + (backendResultRef.current.modules.module3.gaps.length) + ' gaps detected', 'success');
+
+        // Enter the backend analysis stage for all papers
+        setProgress(prev => prev.map((paper) => ({
+          ...paper,
+          stages: paper.stages.map((st, i) => i === 5 ? 'running' : st) as StageStatus[],
+        })));
+        addLog('Sending results to backend for final analysis…', 'info');
+
+        const backendResult = await (backendPromiseRef.current ?? Promise.resolve(null));
+        if (backendResult) {
+          addLog('Backend analysis complete — ' + backendResult.modules.module3.gaps.length + ' gaps detected', 'success');
+          setProgress(prev => prev.map((paper) => ({
+            ...paper,
+            stages: paper.stages.map((st, i) => i === 5 ? 'done' : st) as StageStatus[],
+          })));
+        } else {
+          addLog('Backend analysis did not return a result.', 'error');
         }
         setDone(true);
-        onComplete(backendResultRef.current);
+        onComplete(backendResult);
       }
     };
 
@@ -303,9 +335,9 @@ export default function ProcessingPipeline({ papers, runName, onComplete, onCanc
     if (done) { setEtaSeconds(0); return; }
     const interval = setInterval(() => {
       const elapsed = (Date.now() - startTimeRef.current) / 1000;
-      const totalStagesNow = papers.length * 5;
+      const totalStagesNow = papers.length * STAGES.length;
       const doneNow = progress.reduce((s, p) => s + p.stages.filter(st => st === 'done').length, 0);
-      const pct = doneNow / totalStagesNow;
+      const pct = totalStagesNow ? doneNow / totalStagesNow : 0;
       if (pct > 0.02) {
         const remaining = Math.max(0, Math.round((elapsed / pct) * (1 - pct)));
         setEtaSeconds(remaining);
@@ -315,9 +347,9 @@ export default function ProcessingPipeline({ papers, runName, onComplete, onCanc
   }, [done, papers.length, progress]);
 
   /* ── Derived stats ───────────────────────────────────── */
-  const totalStages = papers.length * 5;
+  const totalStages = papers.length * STAGES.length;
   const doneStages = progress.reduce((sum, p) => sum + p.stages.filter(s => s === 'done').length, 0);
-  const overallPct = Math.round((doneStages / totalStages) * 100);
+  const overallPct = totalStages ? Math.round((doneStages / totalStages) * 100) : 0;
 
   const formatEta = (secs: number | null): string => {
     if (secs === null || secs <= 0) return '';
@@ -366,7 +398,7 @@ export default function ProcessingPipeline({ papers, runName, onComplete, onCanc
               <p className="text-xs text-gray-400">
                 {done
                   ? `${papers.length} paper${papers.length !== 1 ? 's' : ''} fully processed`
-                  : `${papers.length} paper${papers.length !== 1 ? 's' : ''} · 5-stage AI pipeline`}
+                  : `${papers.length} paper${papers.length !== 1 ? 's' : ''} · ${STAGES.length}-stage AI pipeline`}
               </p>
             </div>
           </div>

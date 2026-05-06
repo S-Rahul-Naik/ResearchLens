@@ -10,6 +10,8 @@ const {
 
 const OLLAMA_API = process.env.OLLAMA_API || 'http://127.0.0.1:11434/v1/completions';
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3.1:8b';
+const OLLAMA_TIMEOUT_MS = parseInt(process.env.OLLAMA_TIMEOUT_MS, 10) || 120000;
+const OLLAMA_MAX_TOKENS = parseInt(process.env.OLLAMA_MAX_TOKENS, 10) || 256;
 
 function createChunks(papers) {
   const chunks = [];
@@ -40,8 +42,9 @@ async function callOllama(prompt) {
         stream: false,
         temperature: 0.7,
         top_p: 0.9,
+        max_tokens: OLLAMA_MAX_TOKENS,
       },
-      { timeout: 60000 }
+      { timeout: OLLAMA_TIMEOUT_MS }
     );
 
     const text = response?.data?.response ?? response?.data?.choices?.[0]?.text;
@@ -100,9 +103,10 @@ function buildOllamaPrompt(question, rankedChunks, topics, gaps, trends, papers)
   // 6. Top relevant passages (main context)
   if (rankedChunks && rankedChunks.length > 0) {
     contextParts.push('\nMost Relevant Content:');
-    rankedChunks.slice(0, 4).forEach((chunk, idx) => {
+    rankedChunks.slice(0, 3).forEach((chunk, idx) => {
+      const snippet = chunk.text.replace(/\s+/g, ' ').trim();
       contextParts.push(`${idx + 1}. From "${chunk.title}":`);
-      contextParts.push(`"${chunk.text.substring(0, 300)}..."`);
+      contextParts.push(`"${snippet.substring(0, 200)}..."`);
     });
   }
 
