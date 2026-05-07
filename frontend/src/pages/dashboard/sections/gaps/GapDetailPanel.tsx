@@ -1,7 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { type ResearchGap } from '../../../../mocks/gaps';
-import { mockPapers } from '../../../../mocks/papers';
-import { mockTopics } from '../../../../mocks/topics';
 import ResearchProposal from './ResearchProposal';
 
 function ShareToast({ message, onDone }: { message: string; onDone: () => void }) {
@@ -14,9 +12,9 @@ function ShareToast({ message, onDone }: { message: string; onDone: () => void }
 }
 
 function PrintReport({ gap }: { gap: ResearchGap }) {
-  const pA = mockPapers.filter(p => gap.paperIdsInA.includes(p.id));
-  const pB = mockPapers.filter(p => gap.paperIdsInB.includes(p.id));
-  const pBr = mockPapers.filter(p => gap.paperIdsBridging.includes(p.id));
+  const pA = gap.paperIdsInA ?? [];
+  const pB = gap.paperIdsInB ?? [];
+  const pBr = gap.paperIdsBridging ?? [];
   return (
     <div id="print-gap-report" className="hidden print:block p-10 font-sans text-gray-900">
       <div className="border-b-2 border-gray-800 pb-4 mb-6">
@@ -32,21 +30,19 @@ function PrintReport({ gap }: { gap: ResearchGap }) {
       <div className="mb-4 p-3 bg-gray-50 rounded font-mono text-sm">Formula: {gap.similarityScore.toFixed(3)} × (1/({gap.coOccurrenceCount}+1)) = <strong>{gap.gapScore.toFixed(3)}</strong></div>
       <div className="mb-6"><h2 className="text-sm font-bold uppercase text-gray-500 mb-2">Explanation</h2><p className="text-sm leading-relaxed">{gap.explanation}</p></div>
       {pBr.length === 0 && <div className="p-3 bg-rose-50 rounded text-sm text-rose-700">No bridging papers found.</div>}
-      {pBr.map(p => (<div key={p.id} className="p-2 border border-violet-100 rounded mb-2"><div className="text-xs font-medium">{p.title}</div></div>))}
-      {[...pA.map(p => ({ p, side: 'A' })), ...pB.map(p => ({ p, side: 'B' }))].map(({ p, side }) => (
-        <div key={p.id + side} className="mb-1.5 p-2 border border-gray-100 rounded"><div className="text-xs font-medium">{p.title}</div><div className="text-[10px] text-gray-400">{p.authors.slice(0,2).join(', ')} · {p.year}</div></div>
+      {pBr.map(id => (<div key={id} className="p-2 border border-violet-100 rounded mb-2"><div className="text-xs font-medium">{id}</div></div>))}
+      {[...pA.map(id => ({ id, side: 'A' })), ...pB.map(id => ({ id, side: 'B' }))].map(({ id, side }) => (
+        <div key={id + side} className="mb-1.5 p-2 border border-gray-100 rounded"><div className="text-xs font-medium">{id}</div></div>
       ))}
     </div>
   );
 }
 
-function PaperRow({ paper, accent }: { paper: (typeof mockPapers)[0]; accent: 'teal' | 'amber' | 'violet' }) {
+function PaperRow({ id, accent }: { id: string; accent: 'teal' | 'amber' | 'violet' }) {
   const bg = { teal: 'bg-teal-50 border-teal-100', amber: 'bg-amber-50 border-amber-100', violet: 'bg-violet-50 border-violet-100' }[accent];
-  const tc = { teal: 'text-teal-700', amber: 'text-amber-700', violet: 'text-violet-600' }[accent];
   return (
     <div className={`p-3 rounded-lg border ${bg}`}>
-      <p className="text-xs font-medium text-gray-800 leading-snug">{paper.title}</p>
-      <p className={`text-[10px] mt-0.5 ${tc}`}>{paper.authors.slice(0,2).join(', ')} · {paper.year}</p>
+      <p className="text-xs font-medium text-gray-800 leading-snug">{id}</p>
     </div>
   );
 }
@@ -74,12 +70,12 @@ export default function GapDetailPanel({ gap, currentIndex, totalCount, onNaviga
   const [activeTab, setActiveTab] = useState<'evidence' | 'proposal'>('evidence');
   const shareRef = useRef<HTMLDivElement>(null);
 
-  const papersA = mockPapers.filter(p => gap.paperIdsInA.includes(p.id));
-  const papersB = mockPapers.filter(p => gap.paperIdsInB.includes(p.id));
-  const papersBridge = mockPapers.filter(p => gap.paperIdsBridging.includes(p.id));
-  const topicA = mockTopics.find(t => t.id === gap.topicAId);
-  const topicB = mockTopics.find(t => t.id === gap.topicBId);
-  const maxProfile = Math.max(topicA?.paperIds.length ?? 0, topicB?.paperIds.length ?? 0, 1);
+  const papersA = gap.paperIdsInA ?? [];
+  const papersB = gap.paperIdsInB ?? [];
+  const papersBridge = gap.paperIdsBridging ?? [];
+  const topicAName = gap.topicAName || gap.topicALabel || gap.topicA || 'Topic A';
+  const topicBName = gap.topicBName || gap.topicBLabel || gap.topicB || 'Topic B';
+  const maxProfile = Math.max(papersA.length, papersB.length, 1);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -193,25 +189,22 @@ export default function GapDetailPanel({ gap, currentIndex, totalCount, onNaviga
                 <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Topic Details</h4>
                 <div className="grid grid-cols-2 gap-3 mb-4">
                   {[
-                    { name: gap.topicAName, kws: gap.topicAKeywords, topic: topicA, bg: 'bg-teal-50', border: 'border-teal-100', text: 'text-teal-800', badge: 'bg-teal-100 text-teal-700' },
-                    { name: gap.topicBName, kws: gap.topicBKeywords, topic: topicB, bg: 'bg-amber-50', border: 'border-amber-100', text: 'text-amber-800', badge: 'bg-amber-100 text-amber-700' },
+                    { name: gap.topicAName, kws: gap.topicAKeywords, paperCount: papersA.length, bg: 'bg-teal-50', border: 'border-teal-100', text: 'text-teal-800', badge: 'bg-teal-100 text-teal-700' },
+                    { name: gap.topicBName, kws: gap.topicBKeywords, paperCount: papersB.length, bg: 'bg-amber-50', border: 'border-amber-100', text: 'text-amber-800', badge: 'bg-amber-100 text-amber-700' },
                   ].map(t => (
                     <div key={t.name} className={`p-3 rounded-xl border ${t.bg} ${t.border}`}>
                       <p className={`text-xs font-bold ${t.text} mb-2`}>{t.name}</p>
                       <div className="flex flex-wrap gap-1 mb-2">{t.kws.map(kw => <span key={kw} className={`text-[9px] px-1.5 py-0.5 rounded-full ${t.badge}`}>{kw}</span>)}</div>
                       <div className="flex items-center gap-2 text-[10px]">
-                        <span className="text-gray-500"><strong className="text-gray-700">{t.topic?.paperIds.length ?? 0}</strong> papers</span>
-                        <span className={`px-1.5 py-0.5 rounded-full text-[9px] ${t.topic?.trend === 'rising' ? 'bg-green-100 text-green-700' : t.topic?.trend === 'declining' ? 'bg-rose-100 text-rose-600' : 'bg-gray-100 text-gray-500'}`}>
-                          {t.topic?.trend === 'rising' ? '↑' : t.topic?.trend === 'declining' ? '↓' : '→'} {t.topic?.trend}
-                        </span>
+                        <span className="text-gray-500"><strong className="text-gray-700">{t.paperCount}</strong> papers</span>
                       </div>
                     </div>
                   ))}
                 </div>
                 <div className="bg-gray-50 rounded-xl p-3.5 space-y-2.5">
                   <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2">Research Profile</p>
-                  <ProfileBar label={gap.topicAName} count={topicA?.paperIds.length ?? 0} max={maxProfile} color="#0d9488" />
-                  <ProfileBar label={gap.topicBName} count={topicB?.paperIds.length ?? 0} max={maxProfile} color="#f59e0b" />
+                  <ProfileBar label={gap.topicAName} count={papersA.length} max={maxProfile} color="#0d9488" />
+                  <ProfileBar label={gap.topicBName} count={papersB.length} max={maxProfile} color="#f59e0b" />
                   <div className="h-px bg-gray-200" />
                   <ProfileBar label="Bridging both" count={papersBridge.length} max={maxProfile} color="#8b5cf6" note="bridge" />
                 </div>
@@ -241,13 +234,22 @@ export default function GapDetailPanel({ gap, currentIndex, totalCount, onNaviga
               <section className="px-6 pt-4 pb-6 space-y-4">
                 <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Supporting Evidence</h4>
                 {papersA.length > 0 && (
-                  <div><p className="text-xs font-semibold text-teal-700 mb-2 flex items-center gap-1.5"><i className="ri-file-list-line" />Papers in {gap.topicAName} ({papersA.length})</p><div className="space-y-1.5">{papersA.map(p => <PaperRow key={p.id} paper={p} accent="teal" />)}</div></div>
+                  <div>
+                    <p className="text-xs font-semibold text-teal-700 mb-2 flex items-center gap-1.5"><i className="ri-file-list-line" />Papers in {gap.topicAName} ({papersA.length})</p>
+                    <div className="space-y-1.5">{papersA.map(id => <PaperRow key={id} id={id} accent="teal" />)}</div>
+                  </div>
                 )}
                 {papersB.length > 0 && (
-                  <div><p className="text-xs font-semibold text-amber-700 mb-2 flex items-center gap-1.5"><i className="ri-file-list-line" />Papers in {gap.topicBName} ({papersB.length})</p><div className="space-y-1.5">{papersB.map(p => <PaperRow key={p.id} paper={p} accent="amber" />)}</div></div>
+                  <div>
+                    <p className="text-xs font-semibold text-amber-700 mb-2 flex items-center gap-1.5"><i className="ri-file-list-line" />Papers in {gap.topicBName} ({papersB.length})</p>
+                    <div className="space-y-1.5">{papersB.map(id => <PaperRow key={id} id={id} accent="amber" />)}</div>
+                  </div>
                 )}
                 {papersBridge.length > 0 ? (
-                  <div><p className="text-xs font-semibold text-violet-700 mb-2 flex items-center gap-1.5"><i className="ri-links-line" />Bridging Papers ({papersBridge.length})</p><div className="space-y-1.5">{papersBridge.map(p => <PaperRow key={p.id} paper={p} accent="violet" />)}</div></div>
+                  <div>
+                    <p className="text-xs font-semibold text-violet-700 mb-2 flex items-center gap-1.5"><i className="ri-links-line" />Bridging Papers ({papersBridge.length})</p>
+                    <div className="space-y-1.5">{papersBridge.map(id => <PaperRow key={id} id={id} accent="violet" />)}</div>
+                  </div>
                 ) : (
                   <div className="flex items-center gap-2.5 p-3 bg-rose-50 border border-rose-100 rounded-xl">
                     <i className="ri-error-warning-line text-rose-500 flex-shrink-0" />

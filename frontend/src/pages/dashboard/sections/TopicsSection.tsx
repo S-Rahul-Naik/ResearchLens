@@ -1,7 +1,5 @@
 import { useState, useMemo } from 'react';
-import { mockTopics, type Topic } from '../../../mocks/topics';
-import { mockPapers, type Paper } from '../../../mocks/papers';
-import { mockTrends, type TopicTrend } from '../../../mocks/trends';
+import type { Topic, Paper, TopicTrend } from '../../../mocks/topics';
 import type { RunAllResult, BackendPaper } from '../../../lib/api';
 
 const TOPIC_COLORS = ['#0d9488','#f59e0b','#8b5cf6','#ec4899','#10b981','#06b6d4','#f97316','#3b82f6','#14b8a6','#a855f7'];
@@ -311,12 +309,12 @@ export default function TopicsSection({ backendResult, papers: propPapers = [] }
     if (raw && raw.length > 0) {
       return raw.map((t, i) => ({ id: t.topicId, name: t.name, keywords: t.keywords, paperIds: t.paperIds, coherenceScore: t.coherence, trend: 'stable' as const, color: TOPIC_COLORS[i % TOPIC_COLORS.length] }));
     }
-    return mockTopics;
+    return [];
   }, [backendResult]);
 
   const allPapers: Paper[] = useMemo(() => {
     if (propPapers.length > 0) return propPapers.map(p => ({ ...p, topics: [], keywords: [], status: 'processed' as const, uploadDate: '' }));
-    return mockPapers;
+    return [];
   }, [propPapers]);
 
   const allTrends: TopicTrend[] = useMemo(() => {
@@ -328,7 +326,7 @@ export default function TopicsSection({ backendResult, papers: propPapers = [] }
         return { topicId: t.topicId, topicName: t.topicName, trend: t.trend, growthRate: t.slope, peakYear: peak.year, dataPoints: sorted, color: TOPIC_COLORS[i % TOPIC_COLORS.length] };
       });
     }
-    return mockTrends;
+    return [];
   }, [backendResult]);
 
   /* ── Filtering logic ──────────────────────────────── */

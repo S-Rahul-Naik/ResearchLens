@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import Sidebar, { type DashboardSection } from './components/Sidebar';
@@ -25,6 +25,13 @@ export default function DashboardPage() {
 
   const { runs, addRun, removeRun, clearAll, sessionRunCount } = useAnalysisHistory();
   const latestRun = runs[0] ?? null;
+
+  // On initial load, set currentRun to latestRun if available
+  useEffect(() => {
+    if (!currentRun && latestRun) {
+      setCurrentRun(latestRun);
+    }
+  }, [latestRun, currentRun]);
 
   if (isAuthInitializing) {
     return (

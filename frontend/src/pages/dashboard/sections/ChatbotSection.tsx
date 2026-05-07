@@ -1,55 +1,54 @@
 import { useState, useRef, useEffect } from 'react';
 import { mockChatSessions, mockQuickSuggestions, type ChatMessage } from '../../../mocks/chatData';
-import { mockPapers } from '../../../mocks/papers';
-import { mockGaps } from '../../../mocks/gaps';
-import { mockTopics } from '../../../mocks/topics';
 import { askChatbot, type BackendPaper, type RunAllResult } from '../../../lib/api';
 
 function generateAnswer(query: string, realTopics: RunAllResult['modules']['module2']['topics'], realGaps: RunAllResult['modules']['module3']['gaps'], realPapers: BackendPaper[]): { content: string; citations: { paperId: string; title: string; relevance: number }[] } {
   const q = query.toLowerCase();
-  const topics = realTopics.length > 0 ? realTopics : null;
-  const gaps = realGaps.length > 0 ? realGaps : null;
-  const papers = realPapers.length > 0 ? realPapers : mockPapers;
-  if (q.includes('gap') || q.includes('gaps')) {
-    const topGap = gaps ? (gaps[0] as RunAllResult['modules']['module3']['gaps'][0]) : mockGaps[0];
-    const gapAName = gaps ? (topGap as RunAllResult['modules']['module3']['gaps'][0]).topicALabel : (topGap as typeof mockGaps[0]).topicAName;
-    const gapBName = gaps ? (topGap as RunAllResult['modules']['module3']['gaps'][0]).topicBLabel : (topGap as typeof mockGaps[0]).topicBName;
-    const gapScore = gaps ? (topGap as RunAllResult['modules']['module3']['gaps'][0]).gapScore : (topGap as typeof mockGaps[0]).gapScore;
-    const similarity = gaps ? (topGap as RunAllResult['modules']['module3']['gaps'][0]).similarity : (topGap as typeof mockGaps[0]).similarityScore;
-    const coOcc = gaps ? (topGap as RunAllResult['modules']['module3']['gaps'][0]).coOccurrence : (topGap as typeof mockGaps[0]).coOccurrenceCount;
-    const explanation = gaps ? (topGap as RunAllResult['modules']['module3']['gaps'][0]).recommendation : (topGap as typeof mockGaps[0]).explanation;
+  const topics = realTopics.length > 0 ? realTopics : [];
+  const gaps = realGaps.length > 0 ? realGaps : [];
+  const papers = realPapers.length > 0 ? realPapers : [];
+    if (q.includes('gap') || q.includes('gaps')) {
+    if (gaps.length === 0) {
+      return { content: 'No research gaps were detected in this dataset.', citations: [] };
+    }
+    const topGap = gaps[0];
+    const gapAName = (topGap as any).topicALabel || (topGap as any).topicAName || ((topGap as any).topicA || 'Topic A');
+    const gapBName = (topGap as any).topicBLabel || (topGap as any).topicBName || ((topGap as any).topicB || 'Topic B');
+    const gapScore = (topGap as any).gapScore ?? 0;
+    const similarity = (topGap as any).similarity ?? 0;
+    const coOcc = (topGap as any).coOccurrence ?? (topGap as any).coOccurrenceCount ?? 0;
+    const explanation = (topGap as any).recommendation || (topGap as any).explanation || '';
     return {
       content: `Based on the uploaded papers, the top research gap is between **${gapAName}** and **${gapBName}** (gap score: ${gapScore.toFixed(3)}).\n\nSimilarity: ${similarity.toFixed(2)}, Co-occurrence: ${coOcc}.\n\n${explanation}`,
       citations: papers.slice(0, 3).map((p) => ({ paperId: p.id, title: p.title, relevance: 0.88 + Math.random() * 0.1 })),
     };
   }
   if (q.includes('topic') || q.includes('cluster')) {
-    const topicsArr = topics ?? mockTopics;
-    const top = topicsArr.slice(0, 3);
-    const getTopicName = (t: typeof topicsArr[0]) => topics ? (t as RunAllResult['modules']['module2']['topics'][0]).name : (t as typeof mockTopics[0]).name;
-    const getTopicPaperCount = (t: typeof topicsArr[0]) => topics ? (t as RunAllResult['modules']['module2']['topics'][0]).paperIds.length : (t as typeof mockTopics[0]).paperIds.length;
-    const getTopicCoherence = (t: typeof topicsArr[0]) => topics ? (t as RunAllResult['modules']['module2']['topics'][0]).coherence : (t as typeof mockTopics[0]).coherenceScore;
+    const top = topics.slice(0, 3);
+    const getTopicName = (t: typeof topics[0]) => (t as any).name ?? (t as any).topicName ?? 'Topic';
+    const getTopicPaperCount = (t: typeof topics[0]) => (t as any).paperIds?.length ?? 0;
+    const getTopicCoherence = (t: typeof topics[0]) => (t as any).coherence ?? 0;
     return {
-      content: `The dataset contains **${topicsArr.length} topics** detected:\n\n${top.map((t) => `• **${getTopicName(t)}** — ${getTopicPaperCount(t)} papers, coherence: ${getTopicCoherence(t).toFixed(2)}`).join('\n')}\n\n...and ${topicsArr.length - 3} more topics.`,
+      content: `The dataset contains **${topics.length} topics** detected:\n\n${top.map((t) => `• **${getTopicName(t)}** — ${getTopicPaperCount(t)} papers, coherence: ${getTopicCoherence(t).toFixed(2)}`).join('\n')}\n\n...and ${Math.max(0, topics.length - 3)} more topics.`,
       citations: papers.slice(0, 2).map((p) => ({ paperId: p.id, title: p.title, relevance: 0.82 })),
     };
   }
   if (q.includes('federated') || q.includes('privacy')) {
-    const papers = mockPapers.filter((p) => p.topics.includes('t001'));
+    const papersFiltered = papers.filter((p) => (p as any).topics?.includes?.('t001'));
     return {
-      content: `Found **${papers.length} papers** on federated learning:\n\n${papers.slice(0, 3).map((p) => `• "${p.title}" (${p.year})`).join('\n')}\n\nKey themes: privacy-preserving training, non-IID data, Byzantine fault tolerance, gradient aggregation.`,
-      citations: papers.slice(0, 3).map((p) => ({ paperId: p.id, title: p.title, relevance: 0.91 + Math.random() * 0.08 })),
+      content: `Found **${papersFiltered.length} papers** on federated learning:\n\n${papersFiltered.slice(0, 3).map((p) => `• "${p.title}" (${(p as any).year ?? ''})`).join('\n')}\n\nKey themes: privacy-preserving training, non-IID data, Byzantine fault tolerance, gradient aggregation.`,
+      citations: papersFiltered.slice(0, 3).map((p) => ({ paperId: p.id, title: p.title, relevance: 0.91 + Math.random() * 0.08 })),
     };
   }
   if (q.includes('trend') || q.includes('rising') || q.includes('growing')) {
     return {
       content: `The fastest-growing topics based on year-over-year paper counts:\n\n1. **Large Language Models** (+72% growth rate) — peaking in 2024\n2. **Clinical AI & Health** (+41% growth rate) — strongly rising\n3. **Robotics & Embodied AI** (+38% growth rate) — rising\n\nReinforcement Learning and Computer Vision remain **stable**.`,
-      citations: mockPapers.filter((p) => p.topics.includes('t002')).slice(0, 2).map((p) => ({ paperId: p.id, title: p.title, relevance: 0.79 })),
+      citations: papers.filter((p) => (p as any).topics?.includes?.('t002')).slice(0, 2).map((p) => ({ paperId: p.id, title: p.title, relevance: 0.79 })),
     };
   }
   const relevant = papers.filter((p) =>
     p.title.toLowerCase().includes(q.split(' ')[0]) ||
-    (p as typeof mockPapers[0]).keywords?.some((k) => q.includes(k))
+    (p as any).keywords?.some((k: string) => q.includes(k))
   ).slice(0, 3);
   if (relevant.length > 0) {
     return {
@@ -170,9 +169,7 @@ export default function ChatbotSection({ papers = [], backendResult }: { papers?
             </div>
             <div>
               <span className="text-sm font-semibold text-gray-800">ResearchLens AI</span>
-              <span className="ml-2 text-[10px] px-2 py-0.5 bg-green-50 text-green-700 rounded-full font-medium">
-              {papers.length > 0 ? `RAG · ${papers.length} papers loaded` : `RAG · ${mockPapers.length} papers (demo)`}
-            </span>
+              <span className="ml-2 text-[10px] px-2 py-0.5 bg-green-50 text-green-700 rounded-full font-medium">RAG · {papers.length} papers</span>
             </div>
           </div>
         </div>

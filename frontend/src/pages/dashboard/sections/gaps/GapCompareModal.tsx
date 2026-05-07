@@ -1,5 +1,3 @@
-import { mockPapers } from '../../../../mocks/papers';
-import { mockTopics } from '../../../../mocks/topics';
 import type { ResearchGap } from '../../../../mocks/gaps';
 
 interface Props {
@@ -25,11 +23,11 @@ function MetricBar({ value, max = 1, color }: { value: number; max?: number; col
 }
 
 function GapPane({ gap, side }: { gap: ResearchGap; side: 'A' | 'B' }) {
-  const topicA = mockTopics.find(t => t.id === gap.topicAId);
-  const topicB = mockTopics.find(t => t.id === gap.topicBId);
-  const papersInA = mockPapers.filter(p => gap.paperIdsInA.includes(p.id));
-  const papersInB = mockPapers.filter(p => gap.paperIdsInB.includes(p.id));
-  const bridging = mockPapers.filter(p => gap.paperIdsBridging.includes(p.id));
+  const topicAName = gap.topicAName || gap.topicALabel || gap.topicA || 'Topic A';
+  const topicBName = gap.topicBName || gap.topicBLabel || gap.topicB || 'Topic B';
+  const papersInA = gap.paperIdsInA ?? [];
+  const papersInB = gap.paperIdsInB ?? [];
+  const bridging = gap.paperIdsBridging ?? [];
 
   const accent = side === 'A' ? '#0d9488' : '#f59e0b';
   const accentLight = side === 'A' ? 'bg-teal-50 text-teal-700 border-teal-100' : 'bg-amber-50 text-amber-700 border-amber-100';
@@ -76,9 +74,9 @@ function GapPane({ gap, side }: { gap: ResearchGap; side: 'A' | 'B' }) {
         ].map((item, i) => (
           <div key={i} className="rounded-xl border border-gray-100 p-3">
             <div className="flex items-center gap-2 mb-2">
-              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: item.t?.color ?? accent }} />
+              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: accent }} />
               <span className="text-xs font-semibold text-gray-800 truncate">{item.name}</span>
-              <span className="ml-auto text-[10px] text-gray-400 flex-shrink-0">{item.t?.paperIds.length ?? 0} papers</span>
+              <span className="ml-auto text-[10px] text-gray-400 flex-shrink-0">{(item.kws ? (item.kws.length) : 0)} keywords</span>
             </div>
             <div className="flex flex-wrap gap-1">
               {item.kws.slice(0, 4).map(kw => (
@@ -92,30 +90,16 @@ function GapPane({ gap, side }: { gap: ResearchGap; side: 'A' | 'B' }) {
       {/* Evidence */}
       <div className="rounded-xl border border-gray-100 p-3 space-y-3">
         <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Evidence</p>
-        {[
-          { label: `Papers in ${gap.topicAName}`, items: papersInA, color: 'text-teal-600' },
-          { label: `Papers in ${gap.topicBName}`, items: papersInB, color: 'text-amber-600' },
-          { label: 'Bridging Papers', items: bridging, color: bridging.length === 0 ? 'text-rose-500' : 'text-green-600' },
-        ].map(group => (
-          <div key={group.label}>
-            <p className="text-[10px] font-medium text-gray-500 mb-1">{group.label} <span className={`font-bold ${group.color}`}>({group.items.length})</span></p>
-            {group.items.length === 0 ? (
-              <p className="text-[10px] text-rose-400 italic">None in dataset</p>
-            ) : (
-              <ul className="space-y-0.5">
-                {group.items.slice(0, 3).map(p => (
-                  <li key={p.id} className="text-[10px] text-gray-600 truncate flex items-start gap-1">
-                    <i className="ri-file-text-line flex-shrink-0 mt-0.5 text-gray-300" />
-                    {p.title}
-                  </li>
-                ))}
-                {group.items.length > 3 && (
-                  <li className="text-[10px] text-gray-400">+{group.items.length - 3} more</li>
-                )}
-              </ul>
-            )}
-          </div>
-        ))}
+        <div>
+          <p className="text-[10px] font-medium text-gray-500 mb-1">Papers in {gap.topicAName} <span className="font-bold text-teal-600">({papersInA.length})</span></p>
+          {papersInA.length === 0 ? <p className="text-[10px] text-rose-400 italic">None in dataset</p> : <ul className="space-y-0.5">{papersInA.slice(0,3).map(id => <li key={id} className="text-[10px] text-gray-600">{id}</li>)}{papersInA.length>3 && <li className="text-[10px] text-gray-400">+{papersInA.length-3} more</li>}</ul>}
+
+          <p className="text-[10px] font-medium text-gray-500 mt-3 mb-1">Papers in {gap.topicBName} <span className="font-bold text-amber-600">({papersInB.length})</span></p>
+          {papersInB.length === 0 ? <p className="text-[10px] text-rose-400 italic">None in dataset</p> : <ul className="space-y-0.5">{papersInB.slice(0,3).map(id => <li key={id} className="text-[10px] text-gray-600">{id}</li>)}{papersInB.length>3 && <li className="text-[10px] text-gray-400">+{papersInB.length-3} more</li>}</ul>}
+
+          <p className="text-[10px] font-medium text-gray-500 mt-3 mb-1">Bridging Papers <span className={`${bridging.length===0 ? 'font-bold text-rose-500' : 'font-bold text-green-600'}`}>({bridging.length})</span></p>
+          {bridging.length === 0 ? <p className="text-[10px] text-rose-400 italic">None in dataset</p> : <ul className="space-y-0.5">{bridging.slice(0,3).map(id => <li key={id} className="text-[10px] text-gray-600">{id}</li>)}{bridging.length>3 && <li className="text-[10px] text-gray-400">+{bridging.length-3} more</li>}</ul>}
+        </div>
       </div>
 
       {/* Explanation */}

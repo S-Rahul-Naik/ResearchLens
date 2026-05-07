@@ -53,6 +53,7 @@ export interface BackendPaper {
 export interface RunAllPayload {
   papers: BackendPaper[];
   question?: string;
+  reportName?: string;
 }
 
 export interface TopicResult {
@@ -213,6 +214,23 @@ async function patch<T>(path: string, body: unknown): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+async function del<T>(path: string, body: unknown): Promise<T> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const token = getToken();
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const response = await fetch(`${BASE}${path}`, {
+    method: 'DELETE',
+    headers,
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    handleUnauthorized(response.status);
+    throw new Error(extractApiError(text, `Request failed (${response.status})`));
+  }
+  return response.json() as Promise<T>;
+}
+
 // ─── Auth API ─────────────────────────────────────────────
 
 export async function apiSignup(name: string, email: string, password: string): Promise<AuthResponse> {
@@ -283,8 +301,20 @@ export async function apiUploadPdfs(files: File[]): Promise<{ count: number; pap
   return response.json() as Promise<{ count: number; papers: BackendPaper[] }>;
 }
 
+export async function apiDeletePapers(paperIds: string[]): Promise<{ success: boolean; deletedCount: number; message: string }> {
+  return del<{ success: boolean; deletedCount: number; message: string }>('/api/corpus/papers', { paperIds });
+}
+
 export async function runAllModules(payload: RunAllPayload): Promise<RunAllResult> {
-  return post<RunAllResult>('/api/modules/run-all', payload);
+  return post<RunAllResult>('/api/modules/run-all', payload, true);
+}
+
+export async function apiGetAnalysisReports(): Promise<{ count: number; reports: RunAllResult[] }> {
+  return get<{ count: number; reports: RunAllResult[] }>('/api/reports', true);
+}
+
+export async function apiGetAnalysisReport(reportId: string): Promise<RunAllResult> {
+  return get<RunAllResult>(`/api/reports/${reportId}`, true);
 }
 
 export async function askChatbot(papers: BackendPaper[], question: string): Promise<ChatbotResult> {

@@ -229,6 +229,7 @@ export default function ProcessingPipeline({ papers, runName, onComplete, onCanc
         content: (p as any).content ?? p.abstract,
       })),
       question: 'What are the key findings, research gaps and emerging topics?',
+      reportName: runName || undefined,
     };
     backendPromiseRef.current = runAllModules(backendPayload)
       .then((result) => {

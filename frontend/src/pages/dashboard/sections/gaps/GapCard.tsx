@@ -1,6 +1,5 @@
 import { useRef, useEffect, useState } from 'react';
 import { type ResearchGap } from '../../../../mocks/gaps';
-import { mockTopics } from '../../../../mocks/topics';
 
 function AnimatedBar({ value, max = 1, color }: { value: number; max?: number; color: string }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -52,8 +51,10 @@ function insightLine(gap: ResearchGap): string {
 interface Props { gap: ResearchGap; onClick: () => void; selected?: boolean; selectMode?: boolean; }
 
 export default function GapCard({ gap, onClick, selected = false, selectMode = false }: Props) {
-  const topicA = mockTopics.find(t => t.id === gap.topicAId);
-  const topicB = mockTopics.find(t => t.id === gap.topicBId);
+  const topicAName = (gap as any).topicAName || (gap as any).topicALabel || (gap as any).topicA || 'Topic A';
+  const topicBName = (gap as any).topicBName || (gap as any).topicBLabel || (gap as any).topicB || 'Topic B';
+  const topicAPaperCount = (gap as any).topicAPaperCount ?? (gap as any).topicAPaperIds?.length ?? '—';
+  const topicBPaperCount = (gap as any).topicBPaperCount ?? (gap as any).topicBPaperIds?.length ?? '—';
 
   return (
     <div
@@ -74,18 +75,18 @@ export default function GapCard({ gap, onClick, selected = false, selectMode = f
       <div className="px-5 pt-4 pb-3">
         <div className="grid grid-cols-[1fr_auto_1fr] gap-3 items-center">
           <div className="rounded-xl border border-teal-100 bg-teal-50/60 p-3">
-            <p className="text-xs font-bold text-teal-800 mb-1.5 leading-snug">{gap.topicAName}</p>
-            <div className="flex flex-wrap gap-1 mb-2">{gap.topicAKeywords.slice(0, 3).map(kw => <span key={kw} className="text-[9px] px-1.5 py-0.5 bg-teal-100 text-teal-700 rounded-full leading-none">{kw}</span>)}</div>
-            <div className="flex items-center gap-1 text-[10px] text-teal-600 font-medium"><i className="ri-file-text-line" />{topicA?.paperIds.length ?? '—'} papers</div>
+            <p className="text-xs font-bold text-teal-800 mb-1.5 leading-snug">{topicAName}</p>
+            <div className="flex flex-wrap gap-1 mb-2">{(gap as any).topicAKeywords?.slice(0, 3)?.map((kw: string) => <span key={kw} className="text-[9px] px-1.5 py-0.5 bg-teal-100 text-teal-700 rounded-full leading-none">{kw}</span>)}</div>
+            <div className="flex items-center gap-1 text-[10px] text-teal-600 font-medium"><i className="ri-file-text-line" />{topicAPaperCount} papers</div>
           </div>
           <div className="flex flex-col items-center gap-1">
             <div className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 text-gray-500"><i className="ri-arrow-left-right-line text-sm" /></div>
             <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">vs</span>
           </div>
           <div className="rounded-xl border border-amber-100 bg-amber-50/60 p-3">
-            <p className="text-xs font-bold text-amber-800 mb-1.5 leading-snug">{gap.topicBName}</p>
-            <div className="flex flex-wrap gap-1 mb-2">{gap.topicBKeywords.slice(0, 3).map(kw => <span key={kw} className="text-[9px] px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded-full leading-none">{kw}</span>)}</div>
-            <div className="flex items-center gap-1 text-[10px] text-amber-700 font-medium"><i className="ri-file-text-line" />{topicB?.paperIds.length ?? '—'} papers</div>
+            <p className="text-xs font-bold text-amber-800 mb-1.5 leading-snug">{topicBName}</p>
+            <div className="flex flex-wrap gap-1 mb-2">{(gap as any).topicBKeywords?.slice(0, 3)?.map((kw: string) => <span key={kw} className="text-[9px] px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded-full leading-none">{kw}</span>)}</div>
+            <div className="flex items-center gap-1 text-[10px] text-amber-700 font-medium"><i className="ri-file-text-line" />{topicBPaperCount} papers</div>
           </div>
         </div>
       </div>

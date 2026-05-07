@@ -1,7 +1,5 @@
 import { useEffect } from 'react';
 import { type Paper } from '../../../../mocks/papers';
-import { mockTopics } from '../../../../mocks/topics';
-import { mockGaps } from '../../../../mocks/gaps';
 import type { TopicResult, GapResult } from '../../../../lib/api';
 
 // Topic dot colors by index
@@ -24,22 +22,11 @@ export default function PaperDetailModal({ paper, onClose, realTopics = [], real
 
   if (!paper) return null;
 
-  // Use real topics from backend when available, otherwise fall back to mock
-  const useRealData = realTopics.length > 0;
+  // Map topic ids to topic results using provided realTopics; if missing, show topic id label
+  const topics = paper.topics
+    .map(tid => realTopics.find(t => t.topicId === tid) ?? ({ topicId: tid, name: tid, keywords: [], coherence: 0 } as TopicResult));
 
-  const topics = useRealData
-    ? paper.topics
-        .map(tid => realTopics.find(t => t.topicId === tid))
-        .filter(Boolean) as TopicResult[]
-    : paper.topics.map(tid => mockTopics.find(t => t.id === tid)).filter(Boolean) as typeof mockTopics;
-
-  const relatedGaps = useRealData
-    ? realGaps.filter(g => g.evidencePaperIds?.includes(paper.id))
-    : mockGaps.filter(g =>
-        g.paperIdsInA.includes(paper.id) ||
-        g.paperIdsInB.includes(paper.id) ||
-        g.paperIdsBridging.includes(paper.id)
-      );
+  const relatedGaps = realGaps.filter(g => (g.evidencePaperIds ?? []).includes(paper.id));
 
   return (
     <div
@@ -123,48 +110,21 @@ export default function PaperDetailModal({ paper, onClose, realTopics = [], real
             </h3>
             {topics.length === 0 ? (
               <p className="text-xs text-gray-400 italic">No topics assigned yet — process the paper to assign topics.</p>
-            ) : useRealData ? (
-              <div className="space-y-2">
-                {(topics as TopicResult[]).map((topic, idx) => (
-                  <div key={topic.topicId} className="flex items-start gap-3 p-3 rounded-xl bg-gray-50">
-                    <div className="w-2.5 h-2.5 rounded-full mt-1 shrink-0" style={{ background: TOPIC_COLORS[idx % TOPIC_COLORS.length] }} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-800 mb-1">{topic.name}</p>
-                      <div className="flex flex-wrap gap-1">
-                        {topic.keywords.slice(0, 6).map(kw => (
-                          <span key={kw} className="text-[10px] px-1.5 py-0.5 rounded bg-white border border-gray-200 text-gray-500">{kw}</span>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <div className="text-xs font-semibold text-gray-700">{(topic.coherence * 100).toFixed(0)}%</div>
-                      <div className="text-[10px] text-gray-400">coherence</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
             ) : (
               <div className="space-y-2">
-                {(topics as typeof mockTopics).map((topic) => (
-                  <div key={topic.id} className="flex items-start gap-3 p-3 rounded-xl bg-gray-50">
-                    <div className="w-2.5 h-2.5 rounded-full mt-1 shrink-0" style={{ background: topic.color }} />
+                {topics.map((topic, idx) => (
+                  <div key={(topic as any).topicId || idx} className="flex items-start gap-3 p-3 rounded-xl bg-gray-50">
+                    <div className="w-2.5 h-2.5 rounded-full mt-1 shrink-0" style={{ background: TOPIC_COLORS[idx % TOPIC_COLORS.length] }} />
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-sm font-medium text-gray-800">{topic.name}</span>
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
-                          topic.trend === 'rising' ? 'bg-green-50 text-green-700' :
-                          topic.trend === 'declining' ? 'bg-rose-50 text-rose-600' :
-                          'bg-gray-100 text-gray-500'
-                        }`}>{topic.trend === 'rising' ? '↑' : topic.trend === 'declining' ? '↓' : '→'} {topic.trend}</span>
-                      </div>
+                      <p className="text-sm font-medium text-gray-800 mb-1">{(topic as any).name}</p>
                       <div className="flex flex-wrap gap-1">
-                        {topic.keywords.slice(0, 5).map(kw => (
+                        {((topic as any).keywords ?? []).slice(0, 6).map((kw: string) => (
                           <span key={kw} className="text-[10px] px-1.5 py-0.5 rounded bg-white border border-gray-200 text-gray-500">{kw}</span>
                         ))}
                       </div>
                     </div>
                     <div className="text-right shrink-0">
-                      <div className="text-xs font-semibold text-gray-700">{(topic.coherenceScore * 100).toFixed(0)}%</div>
+                      <div className="text-xs font-semibold text-gray-700">{(((topic as any).coherence ?? 0) * 100).toFixed(0)}%</div>
                       <div className="text-[10px] text-gray-400">coherence</div>
                     </div>
                   </div>
@@ -188,46 +148,28 @@ export default function PaperDetailModal({ paper, onClose, realTopics = [], real
                   ? 'Process the paper to detect research gaps.'
                   : 'This paper is not directly involved in any detected gap.'}
               </div>
-            ) : useRealData ? (
+            ) : (
               <div className="space-y-2">
-                {(relatedGaps as GapResult[]).map((gap, idx) => (
-                  <div key={gap.gapId} className="p-3 rounded-xl border border-gray-100 bg-white">
+                {relatedGaps.map((gap, idx) => (
+                  <div key={(gap as any).gapId || idx} className="p-3 rounded-xl border border-gray-100 bg-white">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-800">{gap.topicALabel} × {gap.topicBLabel}</p>
+                        <p className="text-sm font-medium text-gray-800">{(gap as any).topicALabel || (gap as any).topicAName} × {(gap as any).topicBLabel || (gap as any).topicBName}</p>
                         <div className="flex items-center gap-3 mt-1.5">
-                          <span className="text-[10px] text-gray-400">Similarity {gap.similarity.toFixed(2)}</span>
-                          <span className="text-[10px] text-gray-400">Co-occ {gap.coOccurrence}</span>
-                          <span className="text-[10px] font-semibold text-teal-700">Score {gap.gapScore.toFixed(2)}</span>
+                          <span className="text-[10px] text-gray-400">Similarity {(gap as any).similarity?.toFixed ? (gap as any).similarity.toFixed(2) : ((gap as any).similarityScore ?? 0).toFixed(2)}</span>
+                          <span className="text-[10px] text-gray-400">Co-occ {((gap as any).coOccurrence ?? (gap as any).coOccurrenceCount) ?? 0}</span>
+                          <span className="text-[10px] font-semibold text-teal-700">Score {((gap as any).gapScore ?? 0).toFixed(2)}</span>
                         </div>
-                        {gap.recommendation && <p className="text-[10px] text-gray-400 mt-1 line-clamp-1">{gap.recommendation}</p>}
+                        {(gap as any).recommendation && <p className="text-[10px] text-gray-400 mt-1 line-clamp-1">{(gap as any).recommendation}</p>}
                       </div>
                       <div className="flex flex-col items-end gap-1.5 shrink-0">
                         <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
-                          gap.severity === 'critical' ? 'bg-rose-50 text-rose-700 border border-rose-200' :
-                          gap.severity === 'moderate' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
+                          (gap as any).severity === 'critical' ? 'bg-rose-50 text-rose-700 border border-rose-200' :
+                          (gap as any).severity === 'moderate' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
                           'bg-gray-100 text-gray-500 border border-gray-200'
-                        }`}>{gap.severity}</span>
+                        }`}>{(gap as any).severity ?? 'low'}</span>
                         <span className="text-[10px] text-gray-400">Gap #{idx + 1}</span>
                       </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {(relatedGaps as typeof mockGaps).map((gap) => (
-                  <div key={gap.id} className="p-3 rounded-xl border border-gray-100 bg-white">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-800">{gap.topicAName} × {gap.topicBName}</p>
-                        <div className="flex items-center gap-3 mt-1.5">
-                          <span className="text-[10px] text-gray-400">Similarity {gap.similarityScore.toFixed(2)}</span>
-                          <span className="text-[10px] text-gray-400">Co-occ {gap.coOccurrenceCount}</span>
-                          <span className="text-[10px] font-semibold text-teal-700">Score {gap.gapScore.toFixed(2)}</span>
-                        </div>
-                      </div>
-                      <span className="text-[10px] text-gray-400 shrink-0">Rank #{gap.rank}</span>
                     </div>
                   </div>
                 ))}

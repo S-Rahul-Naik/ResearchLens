@@ -1,14 +1,11 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { type Paper } from '../../../mocks/papers';
-import { mockTopics } from '../../../mocks/topics';
-import { mockGaps } from '../../../mocks/gaps';
-import { mockEvaluation } from '../../../mocks/evaluation';
 import PaperDetailModal from './datasets/PaperDetailModal';
 import ProcessingPipeline from './datasets/ProcessingPipeline';
 import { logExport } from '../../../hooks/useExportHistory';
 import type { AnalysisRun } from '../../../hooks/useAnalysisHistory';
 import type { RunAllResult, BackendPaper, TopicResult, GapResult } from '../../../lib/api';
-import { apiUploadPdfs, apiGetUserUploads } from '../../../lib/api';
+import { apiUploadPdfs, apiGetUserUploads, apiDeletePapers } from '../../../lib/api';
 
 const statusColors: Record<Paper['status'], string> = {
   processed: 'bg-green-50 text-green-700',
@@ -27,64 +24,67 @@ const statusIcons: Record<Paper['status'], string> = {
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:4000';
 
 /* ─── Report Generators ─────────────────────────────────── */
-function buildReportData(papers: Paper[], processedCount: number, avgGapScore: string) {
+function buildReportData(
+  papers: Paper[],
+  processedCount: number,
+  avgGapScore: string,
+  topics: TopicResult[],
+  gaps: GapResult[],
+  getTopicName: (topicId: string) => string,
+) {
   return {
     generatedAt: new Date().toISOString(),
     metadata: {
       totalPapers: papers.length,
       processedPapers: processedCount,
-      totalTopics: mockTopics.length,
-      totalGaps: mockGaps.length,
+      totalTopics: topics.length,
+      totalGaps: gaps.length,
       avgGapScore: Number(avgGapScore),
     },
-    gaps: mockGaps.map((g) => ({
-      rank: g.rank,
-      topicA: g.topicAName,
-      topicB: g.topicBName,
-      similarityScore: g.similarityScore,
-      coOccurrenceCount: g.coOccurrenceCount,
-      gapScore: g.gapScore,
-      topicAKeywords: g.topicAKeywords,
-      topicBKeywords: g.topicBKeywords,
-      explanation: g.explanation,
+    gaps: gaps.map((g, idx) => ({
+      rank: idx + 1,
+      topicA: g.topicALabel || getTopicName(g.topicA),
+      topicB: g.topicBLabel || getTopicName(g.topicB),
+      similarityScore: g.similarity,
+      coOccurrenceCount: g.coOccurrence ?? (g as any).coOccurrenceCount ?? 0,
+      gapScore: g.gapScore ?? (g as any).gapScore ?? 0,
+      topicAKeywords: (g as any).topicAKeywords ?? [],
+      topicBKeywords: (g as any).topicBKeywords ?? [],
+      explanation: (g as any).explanation ?? '',
     })),
-    topics: mockTopics.map((t) => ({
+    topics: topics.map((t) => ({
       name: t.name,
       keywords: t.keywords,
-      papersCount: t.paperIds.length,
-      coherenceScore: t.coherenceScore,
-      trend: t.trend,
+      papersCount: t.paperIds?.length || 0,
+      coherenceScore: t.coherence || 0,
+      trend: (t as any).trend ?? 'stable',
     })),
     papers: papers.map((p) => ({
       title: p.title,
       authors: p.authors,
       year: p.year,
       status: p.status,
-      topics: p.topics.map((tid) => mockTopics.find((t) => t.id === tid)?.name ?? tid),
+      topics: p.topics.map((tid) => getTopicName(tid)),
     })),
   };
 }
 
-function generatePrintHTML(papers: Paper[], processedCount: number, avgGapScore: string): string {
-  const rows = mockGaps
-    .map(
-      (g) =>
-        `<tr>
-          <td>${g.rank}</td>
-          <td>${g.topicAName}</td>
-          <td>${g.topicBName}</td>
-          <td>${g.similarityScore.toFixed(2)}</td>
-          <td>${g.coOccurrenceCount}</td>
-          <td><strong>${g.gapScore.toFixed(3)}</strong></td>
+function generatePrintHTML(papers: Paper[], processedCount: number, avgGapScore: string, topics: TopicResult[], gaps: GapResult[], getTopicName: (topicId: string) => string): string {
+  const rows = gaps
+    .map((g, idx) =>
+      `<tr>
+          <td>${idx + 1}</td>
+          <td>${g.topicALabel || getTopicName(g.topicA)}</td>
+          <td>${g.topicBLabel || getTopicName(g.topicB)}</td>
+          <td>${(g.similarity || 0).toFixed(2)}</td>
+          <td>${g.coOccurrence ?? (g as any).coOccurrenceCount ?? 0}</td>
+          <td><strong>${(g.gapScore || 0).toFixed(3)}</strong></td>
         </tr>`
     )
     .join('');
 
-  const topicRows = mockTopics
-    .map(
-      (t) =>
-        `<tr><td>${t.name}</td><td>${t.paperIds.length}</td><td>${(t.coherenceScore * 100).toFixed(0)}%</td><td>${t.trend}</td></tr>`
-    )
+  const topicRows = topics
+    .map((t) => `<tr><td>${t.name}</td><td>${t.paperIds?.length || 0}</td><td>${((t.coherence || 0) * 100).toFixed(0)}%</td><td>${(t as any).trend ?? 'stable'}</td></tr>`)
     .join('');
 
   return `<!DOCTYPE html>
@@ -113,11 +113,11 @@ function generatePrintHTML(papers: Paper[], processedCount: number, avgGapScore:
   <h1>ResearchLens — Gap Analysis Report</h1>
   <div class="meta">Generated ${new Date().toLocaleString()} · ResearchLens v1.0</div>
 
-  <div class="stats">
+    <div class="stats">
     <div class="stat"><div class="val">${papers.length}</div><div class="lbl">Total Papers</div></div>
     <div class="stat"><div class="val">${processedCount}</div><div class="lbl">Processed</div></div>
-    <div class="stat"><div class="val">${mockTopics.length}</div><div class="lbl">Topics</div></div>
-    <div class="stat"><div class="val">${mockGaps.length}</div><div class="lbl">Gaps Detected</div></div>
+    <div class="stat"><div class="val">${topics.length}</div><div class="lbl">Topics</div></div>
+    <div class="stat"><div class="val">${gaps.length}</div><div class="lbl">Gaps Detected</div></div>
     <div class="stat"><div class="val">${avgGapScore}</div><div class="lbl">Avg Gap Score</div></div>
   </div>
 
@@ -137,11 +137,11 @@ function generatePrintHTML(papers: Paper[], processedCount: number, avgGapScore:
 }
 
 /* ─── Bulk export helpers ────────────────────────────────── */
-function bulkExportJSON(papers: Paper[]) {
+function bulkExportJSON(papers: Paper[], getTopicName: (topicId: string) => string) {
   const data = papers.map(p => ({
     id: p.id, title: p.title, authors: p.authors, year: p.year,
     abstract: p.abstract, keywords: p.keywords, status: p.status,
-    topics: p.topics.map(tid => mockTopics.find(t => t.id === tid)?.name ?? tid),
+    topics: p.topics.map(tid => getTopicName(tid)),
     uploadDate: p.uploadDate,
   }));
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -154,7 +154,7 @@ function bulkExportJSON(papers: Paper[]) {
   logExport({ type: 'JSON', label: `${papers.length} selected paper${papers.length !== 1 ? 's' : ''}`, itemCount: papers.length, section: 'Datasets' });
 }
 
-function bulkExportCSV(papers: Paper[]) {
+function bulkExportCSV(papers: Paper[], getTopicName: (topicId: string) => string) {
   const header = ['ID', 'Title', 'Authors', 'Year', 'Status', 'Topics', 'Keywords', 'Upload Date'];
   const rows = papers.map(p => [
     p.id,
@@ -162,7 +162,7 @@ function bulkExportCSV(papers: Paper[]) {
     `"${p.authors.join('; ')}"`,
     p.year,
     p.status,
-    `"${p.topics.map(tid => mockTopics.find(t => t.id === tid)?.name ?? tid).join('; ')}"`,
+    `"${p.topics.map(tid => getTopicName(tid)).join('; ')}"`,
     `"${p.keywords.join('; ')}"`,
     p.uploadDate,
   ]);
@@ -494,12 +494,26 @@ export default function DatasetsSection({ onShowResults }: DatasetsSectionProps)
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
+  const handleDeletePapers = async () => {
+    const idsToDelete = Array.from(selected);
+    try {
+      setUploadMessage(null);
+      await apiDeletePapers(idsToDelete);
+      // Remove from local state after successful deletion
+      setPapers((prev) => prev.filter((p) => !selected.has(p.id)));
+      setSelected(new Set());
+      setUploadMessage(`Successfully deleted ${idsToDelete.length} paper${idsToDelete.length !== 1 ? 's' : ''}.`);
+    } catch (err) {
+      setUploadMessage(`Failed to delete papers: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    }
+  };
+
   const processedCount = papers.filter((p) => p.status === 'processed').length;
   const avgGapScore = processedGaps.length
     ? (processedGaps.reduce((sum, g) => sum + g.gapScore, 0) / processedGaps.length).toFixed(2)
     : '0.00';
 
-  const getTopicName = (topicId: string) => mockTopics.find((t) => t.id === topicId)?.name ?? topicId;
+  const getTopicName = (topicId: string) => processedTopics.find((t) => t.topicId === topicId)?.name ?? processedTopics.find((t: any) => t.topicId === topicId)?.name ?? topicId;
 
   // Filtered + sorted papers
   const filteredPapers = useMemo(() => {
@@ -523,7 +537,7 @@ export default function DatasetsSection({ onShowResults }: DatasetsSectionProps)
 
   // Download handlers
   const handleDownloadJSON = () => {
-    const data = buildReportData(papers, processedCount, avgGapScore);
+    const data = buildReportData(papers, processedCount, avgGapScore, processedTopics, processedGaps, getTopicName);
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -531,12 +545,12 @@ export default function DatasetsSection({ onShowResults }: DatasetsSectionProps)
     a.download = `researchlens-report-${new Date().toISOString().split('T')[0]}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    logExport({ type: 'JSON', label: 'Full gap analysis report', itemCount: mockGaps.length, section: 'Datasets' });
+    logExport({ type: 'JSON', label: 'Full gap analysis report', itemCount: processedGaps.length, section: 'Datasets' });
     setShowDownloadMenu(false);
   };
 
   const handleDownloadPDF = () => {
-    const rawHtml = generatePrintHTML(papers, processedCount, avgGapScore);
+    const rawHtml = generatePrintHTML(papers, processedCount, avgGapScore, processedTopics, processedGaps, getTopicName);
     // Inject auto-print script into <head> so it fires after the page loads from blob URL
     const html = rawHtml.replace('</head>', '<script>window.onload=function(){window.print()}<\/script></head>');
     const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
@@ -544,7 +558,7 @@ export default function DatasetsSection({ onShowResults }: DatasetsSectionProps)
     const win = window.open(url, '_blank');
     if (win) win.focus();
     setTimeout(() => URL.revokeObjectURL(url), 60000);
-    logExport({ type: 'PDF', label: 'Gap analysis printable report', itemCount: mockGaps.length, section: 'Datasets' });
+    logExport({ type: 'PDF', label: 'Gap analysis printable report', itemCount: processedGaps.length, section: 'Datasets' });
     setShowDownloadMenu(false);
   };
 
@@ -817,16 +831,16 @@ export default function DatasetsSection({ onShowResults }: DatasetsSectionProps)
                     </button>
                     {bulkMenuOpen && (
                       <div className="absolute right-0 top-full mt-1.5 z-20 w-44 bg-white rounded-xl border border-gray-100 py-1" style={{ boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>
-                        <button onClick={() => { bulkExportJSON(selectedPapersList); setBulkMenuOpen(false); }} className="whitespace-nowrap w-full flex items-center gap-2.5 px-3.5 py-2 text-xs text-gray-700 hover:bg-gray-50 cursor-pointer">
+                        <button onClick={() => { bulkExportJSON(selectedPapersList, getTopicName); setBulkMenuOpen(false); }} className="whitespace-nowrap w-full flex items-center gap-2.5 px-3.5 py-2 text-xs text-gray-700 hover:bg-gray-50 cursor-pointer">
                           <i className="ri-braces-line text-amber-500" /> Export as JSON
                         </button>
-                        <button onClick={() => { bulkExportCSV(selectedPapersList); setBulkMenuOpen(false); }} className="whitespace-nowrap w-full flex items-center gap-2.5 px-3.5 py-2 text-xs text-gray-700 hover:bg-gray-50 cursor-pointer">
+                        <button onClick={() => { bulkExportCSV(selectedPapersList, getTopicName); setBulkMenuOpen(false); }} className="whitespace-nowrap w-full flex items-center gap-2.5 px-3.5 py-2 text-xs text-gray-700 hover:bg-gray-50 cursor-pointer">
                           <i className="ri-table-line text-teal-500" /> Export as CSV
                         </button>
                       </div>
                     )}
                   </div>
-                  <button onClick={() => setPapers((prev) => prev.filter((p) => !selected.has(p.id)))} className="whitespace-nowrap text-xs text-rose-500 hover:underline cursor-pointer">
+                  <button onClick={handleDeletePapers} className="whitespace-nowrap text-xs text-rose-500 hover:underline cursor-pointer">
                     Delete {selected.size}
                   </button>
                 </div>

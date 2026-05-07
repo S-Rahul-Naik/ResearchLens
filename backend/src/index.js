@@ -14,7 +14,7 @@ function startServer(dbSuffix = '') {
 connectDB()
   .then(async () => {
     startServer();
-    await seedBaseCorpus();
+    // await seedBaseCorpus(); // Base corpus seeding disabled
   })
   .catch((err) => {
     console.warn(`⚠️  MongoDB connection failed: ${err.message}`);

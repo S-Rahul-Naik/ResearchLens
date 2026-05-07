@@ -16,11 +16,13 @@ const { protect } = require('../middleware/auth');
 const { extractKeywords } = require('../utils/text');
 const cloudinary = require('../services/cloudinary');
 const Paper = require('../models/Paper');
+const AnalysisReport = require('../models/AnalysisReport');
 const { dbToStorePaper } = require('../services/corpusSeeder');
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
 const { parsePdf } = require('../services/pdfParser');
+const CLOUDINARY_MAX_BYTES = parseInt(process.env.CLOUDINARY_FILE_MAX_BYTES || '10485760', 10); // default 10 MB
 
 function uploadBufferToCloudinary(buffer, publicId) {
   return new Promise((resolve, reject) => {
@@ -77,6 +79,33 @@ router.get('/corpus/user-uploads', protect, async (req, res) => {
   }
 });
 
+// ── DELETE /api/corpus/papers ── permanently delete user's papers ────
+router.delete('/corpus/papers', protect, async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { paperIds } = req.body;
+
+    if (!Array.isArray(paperIds) || paperIds.length === 0) {
+      return res.status(400).json({ error: 'paperIds array is required and must not be empty' });
+    }
+
+    // Delete papers that belong to the user (not base corpus)
+    const result = await Paper.deleteMany({
+      paperId: { $in: paperIds },
+      userId,
+      isBaseCorpus: false,
+    });
+
+    return res.json({
+      success: true,
+      deletedCount: result.deletedCount,
+      message: `Successfully deleted ${result.deletedCount} paper${result.deletedCount !== 1 ? 's' : ''}`,
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/corpus', (req, res) => {
   const papers = ensurePaperShape(req.body?.papers || []);
   setPapers(papers);
@@ -100,14 +129,18 @@ router.post('/corpus/upload-pdfs', protect, upload.array('files', 50), async (re
   }
   try {
     const userId = req.user._id;
-    const parsed = await Promise.all(
-      req.files.map(async (file) => {
-        const fields = await parsePdf(file.buffer, file.originalname);
-        const paperId = `pdf-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    // Process files sequentially to reduce concurrent upload pressure
+    const parsed = [];
+    for (const file of req.files) {
+      const fields = await parsePdf(file.buffer, file.originalname);
+      const paperId = `pdf-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
-        // Upload to Cloudinary
-        let cloudinaryUrl = '';
-        let cloudinaryPublicId = '';
+      // Upload to Cloudinary (skip if file exceeds configured per-file limit)
+      let cloudinaryUrl = '';
+      let cloudinaryPublicId = '';
+      if (file.size && file.size > CLOUDINARY_MAX_BYTES) {
+        console.warn(`Skipping Cloudinary upload for ${file.originalname}: file size ${file.size} bytes exceeds limit ${CLOUDINARY_MAX_BYTES} bytes`);
+      } else {
         try {
           const uploadResult = await uploadBufferToCloudinary(file.buffer, paperId);
           cloudinaryUrl = uploadResult.secure_url;
@@ -115,20 +148,20 @@ router.post('/corpus/upload-pdfs', protect, upload.array('files', 50), async (re
         } catch (uploadErr) {
           console.warn(`Cloudinary upload failed for ${file.originalname}: ${uploadErr.message}`);
         }
+      }
 
-        // Persist to MongoDB
-        await Paper.create({
-          paperId,
-          ...fields,
-          cloudinaryUrl,
-          cloudinaryPublicId,
-          isBaseCorpus: false,
-          userId,
-        });
+      // Persist to MongoDB
+      await Paper.create({
+        paperId,
+        ...fields,
+        cloudinaryUrl,
+        cloudinaryPublicId,
+        isBaseCorpus: false,
+        userId,
+      });
 
-        return { id: paperId, ...fields, cloudinaryUrl };
-      })
-    );
+      parsed.push({ id: paperId, ...fields, cloudinaryUrl });
+    }
 
     const papers = ensurePaperShape(parsed);
     const existing = getPapers();
@@ -214,11 +247,14 @@ router.post('/modules/9-related-work-draft', (req, res) => {
   res.json(result);
 });
 
-router.post('/modules/run-all', async (req, res) => {
+router.post('/modules/run-all', protect, async (req, res) => {
   try {
+    const userId = req.user._id;
     const papers = pickPapers(req.body?.papers, getPapers());
     const question = req.body?.question || 'What are the key findings and open research gaps?';
+    const reportName = req.body?.reportName || `Analysis Run — ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
 
+    const startTime = Date.now();
     const m1 = runModule1Summarization(papers);
     const m2 = runModule2TopicModeling(papers);
     const m3 = runModule3GapDetection(papers, m2.topics);
@@ -228,6 +264,7 @@ router.post('/modules/run-all', async (req, res) => {
     const m7 = runModule7ContradictionDetection(papers, m2.topics);
     const m8 = runModule8DatasetMethodMatrix(papers);
     const m9 = runModule9RelatedWorkDraft(papers, m2.topics);
+    const processingTimeMs = Date.now() - startTime;
 
     const modulesInOrder = [
       { moduleId: 1, name: 'Summarization', result: m1 },
@@ -259,11 +296,66 @@ router.post('/modules/run-all', async (req, res) => {
       }
     };
 
+    // Save analysis report to database
+    const yearRange = papers.length > 0
+      ? { start: Math.min(...papers.map(p => p.year || new Date().getFullYear())), end: Math.max(...papers.map(p => p.year || new Date().getFullYear())) }
+      : { start: new Date().getFullYear(), end: new Date().getFullYear() };
+
+    const qualityScore = m2.topics && m2.topics.length > 0
+      ? m2.topics.reduce((sum, t) => sum + (t.coherence || 0), 0) / m2.topics.length
+      : 0;
+
+    const report = await AnalysisReport.create({
+      userId,
+      name: reportName,
+      paperIds: papers.map(p => p.id),
+      paperCount: papers.length,
+      yearRange,
+      module1: m1,
+      module2: m2,
+      module3: m3,
+      module4: m4,
+      module5: m5,
+      module6: m6,
+      module7: m7,
+      module8: m8,
+      module9: m9,
+      topicCount: m2.topics ? m2.topics.length : 0,
+      gapCount: m3.gaps ? m3.gaps.length : 0,
+      qualityScore,
+      processingTimeMs,
+    });
+
     addRun(run);
-    res.json(run);
+    res.json({ ...run, reportId: report._id });
   } catch (error) {
     console.error('Run-All Error:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// ── GET /api/reports ── return user's analysis reports ────
+router.get('/reports', protect, async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const reports = await AnalysisReport.find({ userId }).sort({ createdAt: -1 }).lean();
+    res.json({ count: reports.length, reports });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /api/reports/:reportId ── return specific report ────
+router.get('/reports/:reportId', protect, async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const report = await AnalysisReport.findOne({ _id: req.params.reportId, userId }).lean();
+    if (!report) {
+      return res.status(404).json({ error: 'Report not found' });
+    }
+    res.json(report);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

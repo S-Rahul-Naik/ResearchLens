@@ -1,7 +1,5 @@
 import { useMemo, useState } from 'react';
 import { mockEvaluation, type EvaluationMetrics } from '../../../mocks/evaluation';
-import { mockTopics } from '../../../mocks/topics';
-import { mockPapers } from '../../../mocks/papers';
 import type { RunAllResult, BackendPaper } from '../../../lib/api';
 
 function CircularProgress({ value, max = 1, color, size = 100 }: { value: number; max?: number; color: string; size?: number }) {
@@ -162,9 +160,8 @@ function CoOccurrenceMatrix({ topics, paperTopicMap }: {
 
 export default function EvaluationSection({ backendResult, papers: propPapers = [] }: { backendResult?: RunAllResult | null; papers?: BackendPaper[] }) {
   const topics = useMemo(() => {
-    const raw = backendResult?.modules.module2.topics;
-    if (raw && raw.length > 0) return raw.map(t => ({ id: t.topicId, name: t.name }));
-    return mockTopics.map(t => ({ id: t.id, name: t.name }));
+    const raw = backendResult?.modules.module2.topics ?? [];
+    return raw.map(t => ({ id: (t as any).topicId ?? (t as any).id, name: (t as any).name ?? (t as any).topicName ?? 'Topic' }));
   }, [backendResult]);
 
   const paperTopicMap = useMemo(() => {
@@ -176,7 +173,7 @@ export default function EvaluationSection({ backendResult, papers: propPapers = 
         map.set(paperId, [...existing, topicId]);
       });
     } else {
-      mockPapers.forEach(p => map.set(p.id, p.topics));
+      // no assignments available — leave map empty
     }
     return map;
   }, [backendResult]);
@@ -186,7 +183,7 @@ export default function EvaluationSection({ backendResult, papers: propPapers = 
     const raw = backendResult.modules;
     const topicsArr = raw.module2.topics;
     const gapsArr = raw.module3.gaps;
-    const papers = propPapers.length > 0 ? propPapers : mockPapers;
+    const papers = propPapers.length > 0 ? propPapers : [];
     const years = papers.map(p => p.year).filter(y => y > 0);
     const avgCoherence = topicsArr.length > 0 ? topicsArr.reduce((s, t) => s + t.coherence, 0) / topicsArr.length : 0;
     const assignedPaperIds = new Set(raw.module2.assignments.map(a => a.paperId));
