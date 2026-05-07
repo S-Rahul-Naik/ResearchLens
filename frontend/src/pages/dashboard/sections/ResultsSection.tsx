@@ -11,7 +11,7 @@ import EvaluationSummarySection from './results/EvaluationSummarySection';
 import { useSnapshots } from '../../../hooks/useSnapshots';
 import SnapshotsPanel from '../components/SnapshotsPanel';
 
-const NAV_ITEMS = [
+/* const NAV_ITEMS = [
   { id: 'result-dataset', label: 'Dataset', icon: 'ri-database-2-line' },
   { id: 'result-topics', label: 'Topics', icon: 'ri-price-tag-3-line' },
   { id: 'result-gaps', label: 'Gaps', icon: 'ri-radar-line' },
@@ -19,7 +19,7 @@ const NAV_ITEMS = [
   { id: 'result-map', label: 'Map', icon: 'ri-map-2-line' },
   { id: 'result-chat', label: 'Chat', icon: 'ri-chat-3-line' },
   { id: 'result-eval', label: 'Evaluation', icon: 'ri-bar-chart-grouped-line' },
-];
+]; */
 
 const METHODOLOGY_SECTIONS = [
   {
@@ -571,21 +571,23 @@ export default function ResultsSection({ onClose, run }: { onClose?: () => void;
 
           {/* Nav links */}
           <div className="flex items-center gap-0 flex-1 overflow-x-auto">
-            {NAV_ITEMS.map(item => (
-              <button
-                key={item.id}
-                onClick={() => scrollTo(item.id)}
-                className="whitespace-nowrap flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-500 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors cursor-pointer"
-              >
-                <i className={`${item.icon} text-[11px]`} />
-                {item.label}
-              </button>
-            ))}
+            {/**
+              {NAV_ITEMS.map(item => (
+                <button
+                  key={item.id}
+                  onClick={() => scrollTo(item.id)}
+                  className="whitespace-nowrap flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-500 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors cursor-pointer"
+                >
+                  <i className={`${item.icon} text-[11px]`} />
+                  {item.label}
+                </button>
+              ))}
+            */}
           </div>
 
           {/* Action buttons */}
           <div className="flex items-center gap-2 flex-shrink-0">
-            {/* Methodology toggle */}
+            {/**
             <button
               onClick={() => setMethodologyOpen(true)}
               className={`whitespace-nowrap flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors cursor-pointer ${methodologyOpen ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'border-gray-200 text-gray-500 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200'}`}
@@ -594,7 +596,6 @@ export default function ResultsSection({ onClose, run }: { onClose?: () => void;
               Methodology
             </button>
 
-            {/* Save Snapshot */}
             <button
               onClick={() => setSaveModalOpen(true)}
               className={`whitespace-nowrap flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors cursor-pointer ${savedFeedback ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'border-gray-200 text-gray-500 hover:bg-violet-50 hover:text-violet-600 hover:border-violet-200'}`}
@@ -606,7 +607,6 @@ export default function ResultsSection({ onClose, run }: { onClose?: () => void;
               )}
             </button>
 
-            {/* Snapshots list */}
             <button
               onClick={() => setSnapshotsPanelOpen(true)}
               title="View all snapshots"
@@ -614,6 +614,7 @@ export default function ResultsSection({ onClose, run }: { onClose?: () => void;
             >
               <i className="ri-bookmark-2-line text-xs" />
             </button>
+            */}
 
             {/* Share Report */}
             <div ref={shareRef} className="relative">
@@ -675,7 +676,7 @@ export default function ResultsSection({ onClose, run }: { onClose?: () => void;
       <div ref={contentRef} className="max-w-5xl mx-auto px-8 py-10">
         <DatasetSummarySection run={run} />
         <TopicModelingSection backendResult={backendResult} />
-        <GapDetectionSection backendResult={backendResult} />
+        <GapDetectionSection backendResult={backendResult} papers={papers} />
         <TrendAnalysisSection backendResult={backendResult} />
         <ResearchMapResultsSection backendResult={backendResult} />
         <ChatResultsSection backendResult={backendResult} papers={papers} />

@@ -76,7 +76,11 @@ function load(): AnalysisRun[] {
 }
 
 function persist(runs: AnalysisRun[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(runs));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(runs));
+  } catch (error) {
+    console.warn('Unable to persist analysis history to localStorage:', error);
+  }
 }
 
 export function useAnalysisHistory() {

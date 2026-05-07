@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { RunAllResult } from '../../../../lib/api';
+import type { BackendPaper, RunAllResult } from '../../../../lib/api';
 
 // Unified gap type for display
 interface GapPaper { id: string; title: string; authors: string[]; year: number; }
@@ -208,7 +208,7 @@ const FILTER_OPTIONS: { key: GapFilter; label: string }[] = [
   { key: 'high', label: 'Score ≥ 0.6' },
 ];
 
-export default function GapDetectionSection({ backendResult }: { backendResult?: RunAllResult | null }) {
+export default function GapDetectionSection({ backendResult, papers = [] }: { backendResult?: RunAllResult | null; papers?: BackendPaper[] }) {
   const [sortKey, setSortKey] = useState<GapSortKey>('gapScore');
   const [sortDir, setSortDir] = useState<'desc' | 'asc'>('desc');
   const [filter, setFilter] = useState<GapFilter>('all');
@@ -218,14 +218,26 @@ export default function GapDetectionSection({ backendResult }: { backendResult?:
     ? (() => {
         const summaries = backendResult.modules.module1.summaries;
         const topics = backendResult.modules.module2.topics;
+        const paperMap = new Map(papers.map(p => [p.id, p]));
         const paperById = (pid: string): GapPaper => {
-          const s = summaries.find(su => su.paperId === pid);
-          return { id: pid, title: s?.title ?? pid, authors: ['–'], year: 0 };
+          const backendPaper = paperMap.get(pid);
+          if (backendPaper) {
+            return {
+              id: backendPaper.id,
+              title: backendPaper.title || pid,
+              authors: Array.isArray(backendPaper.authors) ? backendPaper.authors : ['–'],
+              year: Number(backendPaper.year) || 0,
+            };
+          }
+          const summary = summaries.find(su => su.paperId === pid);
+          return { id: pid, title: summary?.title ?? pid, authors: ['–'], year: 0 };
         };
         return backendResult.modules.module3.gaps.map((g, i) => {
           const topicAEntry = topics.find(t => t.topicId === g.topicA);
           const topicBEntry = topics.find(t => t.topicId === g.topicB);
-          const half = Math.ceil(g.evidencePaperIds.length / 2);
+          const topicAPaperIds = topicAEntry?.paperIds ?? [];
+          const topicBPaperIds = topicBEntry?.paperIds ?? [];
+          const bridgingPaperIds = Array.from(new Set(g.evidencePaperIds ?? []));
           return {
             id: g.gapId,
             topicAId: g.topicA, topicBId: g.topicB,
@@ -237,9 +249,9 @@ export default function GapDetectionSection({ backendResult }: { backendResult?:
             similarityScore: g.similarity,
             coOccurrenceCount: g.coOccurrence,
             gapScore: g.gapScore,
-            papersA: g.evidencePaperIds.slice(0, half).map(paperById),
-            papersB: g.evidencePaperIds.slice(half).map(paperById),
-            papersBridging: [],
+            papersA: topicAPaperIds.map(paperById),
+            papersB: topicBPaperIds.map(paperById),
+            papersBridging: bridgingPaperIds.map(paperById),
             explanation: g.recommendation,
           } satisfies DisplayGap;
         });
