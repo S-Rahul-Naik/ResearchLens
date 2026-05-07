@@ -56,6 +56,27 @@ router.get('/corpus', protect, async (req, res) => {
   }
 });
 
+// ── GET /api/corpus/user-uploads ── return only user's uploaded papers (no base corpus) ────
+router.get('/corpus/user-uploads', protect, async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const dbPapers = await Paper.find({
+      userId,
+      isBaseCorpus: false,
+    }).lean();
+    // Regenerate keywords on fetch to normalize older noisy keyword sets.
+    const papers = dbPapers.map((doc) => {
+      const paper = dbToStorePaper(doc);
+      const source = `${paper.abstract || ''} ${(paper.content || '').slice(0, 6000)}`;
+      paper.keywords = extractKeywords(source, 12);
+      return paper;
+    });
+    return res.json({ count: papers.length, papers });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/corpus', (req, res) => {
   const papers = ensurePaperShape(req.body?.papers || []);
   setPapers(papers);

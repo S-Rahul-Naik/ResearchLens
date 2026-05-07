@@ -258,6 +258,10 @@ export async function apiGetCorpus(): Promise<{ count: number; papers: BackendPa
   return get<{ count: number; papers: BackendPaper[] }>('/api/corpus', true);
 }
 
+export async function apiGetUserUploads(): Promise<{ count: number; papers: BackendPaper[] }> {
+  return get<{ count: number; papers: BackendPaper[] }>('/api/corpus/user-uploads', true);
+}
+
 export async function setCorpus(papers: BackendPaper[]) {
   return post<{ count: number; papers: BackendPaper[] }>('/api/corpus', { papers });
 }
