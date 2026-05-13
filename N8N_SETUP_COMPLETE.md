@@ -2,7 +2,7 @@
 
 ## What Changed
 
-You've removed the "Quick Analysis" and "Full Analysis" pipeline selection. Now all analyses go through **N8N automation**.
+The app no longer shows the old quick/full pipeline picker. Analysis now goes through the backend n8n bridge, which can call a full-analysis workflow in n8n.
 
 ## Current Status
 
@@ -10,7 +10,7 @@ You've removed the "Quick Analysis" and "Full Analysis" pipeline selection. Now 
 - Removed pipeline selection dialog from frontend
 - Created n8n bridge service (`backend/src/services/n8nBridge.js`)
 - Created `/api/modules/n8n-analysis` endpoint
-- Frontend now calls n8n endpoint
+- Frontend now calls the backend n8n-analysis endpoint
 - Created comprehensive N8N workflow guide
 
 ⏳ **Next Steps:**
@@ -61,12 +61,13 @@ When you visit `http://localhost:5678`:
 
 ### Step 4: Set Environment Variables
 
-Add to your `.env` file in the backend:
+Add to `backend/.env`:
 
 ```bash
 # N8N Configuration
 N8N_BASE_URL=http://localhost:5678
 N8N_ENABLED=true
+N8N_WORKFLOW_FULL_ANALYSIS=full-analysis-workflow
 N8N_API_KEY=  # Optional - leave empty if n8n is local
 ```
 
@@ -201,12 +202,12 @@ Expected response:
 ### After (New Flow)
 1. User clicks "Analyze"
 2. ❌ No more pipeline selection dialog
-3. Frontend calls `/api/modules/n8n-analysis`
-4. Backend sends papers to N8N webhook
+3. Frontend calls the backend API
+4. Backend sends papers to `/webhook/full-analysis-workflow` on n8n
 5. N8N runs all 10 modules via workflow
 6. N8N returns formatted results
 7. Backend saves to MongoDB
-8. Returns to frontend
+8. Backend returns to frontend
 
 ## Backend API Changes
 
@@ -215,7 +216,7 @@ Expected response:
 - `POST /api/modules/run-all` - Local full analysis
 
 ### New Endpoint
-- `POST /api/modules/n8n-analysis` - N8N orchestrated analysis
+- `POST /api/modules/n8n-analysis` - Backend n8n bridge for the full analysis flow
 
 ## Frontend Changes
 
@@ -240,6 +241,7 @@ OPENAI_API_KEY=sk-...
 # N8N Configuration
 N8N_BASE_URL=http://localhost:5678
 N8N_ENABLED=true
+N8N_WORKFLOW_FULL_ANALYSIS=full-analysis-workflow
 
 # Optional
 N8N_API_KEY=  # If n8n has API key authentication
@@ -272,7 +274,7 @@ Clients can implement fallback to local analysis if needed.
 3. **Create** the master workflow in n8n UI
 4. **Configure** OpenAI credentials in n8n
 5. **Test** with the curl command above
-6. **Update** `.env` with N8N_BASE_URL
+6. **Update** `backend/.env` with N8N_BASE_URL and N8N_WORKFLOW_FULL_ANALYSIS
 7. **Restart** backend
 8. **Test** full flow from frontend
 

@@ -1,5 +1,7 @@
 # 🚀 N8N is Starting - Quick Action Guide
 
+This guide is for the n8n webhook itself. The app reaches it through the backend `POST /api/modules/n8n-analysis` bridge.
+
 ## ✅ What Just Happened
 - N8N installation completed successfully
 - N8N server is now starting up on http://localhost:5678
@@ -150,24 +152,16 @@ curl -X POST http://localhost:5678/webhook/full-analysis-workflow \
 You should get back a JSON response with all the modules!
 
 ### Step 10: Configure Backend
-In a third terminal, go to your backend folder:
+In a third terminal, edit `backend/.env` and set:
 
 ```bash
-cd backend
-```
-
-Copy the environment file:
-```bash
-cp .env.example.n8n .env
-```
-
-Edit `.env` and update these lines:
-```
 N8N_BASE_URL=http://localhost:5678
+N8N_ENABLED=true
+N8N_WORKFLOW_FULL_ANALYSIS=full-analysis-workflow
 OPENAI_API_KEY=sk-proj-xxx...  # Your actual key
 ```
 
-Save and restart backend:
+Save and restart the backend:
 ```bash
 npm run dev
 ```

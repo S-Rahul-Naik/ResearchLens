@@ -1,5 +1,7 @@
 # N8N Workflow Quick Reference
 
+This reference is for the standalone n8n workflow templates. The main app still uses the backend bridge at `POST /api/modules/n8n-analysis`.
+
 ## Quick Start: Master Workflow Template
 
 Create this workflow in N8N to orchestrate all 10 analysis modules.

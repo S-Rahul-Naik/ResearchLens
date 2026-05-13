@@ -1,5 +1,7 @@
 # ResearchLens N8N Workflow Variants Guide
 
+These workflow files are standalone n8n examples for the 5-section analysis flow. They are separate from the backend n8n bridge used by the main app.
+
 You now have three importable N8N workflows, each with different architecture and use cases:
 
 ## Overview
@@ -253,11 +255,12 @@ curl -X POST http://localhost:5678/webhook/researchlens-5-section-analysis-modul
 
 ### Option C: Using Frontend API
 
-The frontend integration is already set up in:
+The main app integration is already set up in:
 - `backend/src/routes/modules.js` → `POST /api/modules/n8n-analysis`
+- `backend/src/services/n8nBridge.js` → n8n webhook bridge
 - `frontend/src/lib/api.ts` → `n8nAnalysisModules(payload)`
 
-Simply trigger the analysis from the Dashboard, and it will call N8N via the backend bridge.
+Simply trigger the analysis from the Dashboard, and it will call n8n via the backend bridge.
 
 ---
 

@@ -1,5 +1,7 @@
 # ResearchLens N8N Workflows - Quick Reference
 
+These are optional 5-section n8n examples. The main ResearchLens app uses the backend full-analysis bridge described in the n8n setup docs.
+
 ## Files Created
 
 | File | Type | Purpose | Size | Status |

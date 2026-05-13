@@ -5,7 +5,7 @@
 ### 1. **Frontend Changes**
    - ❌ **REMOVED** the "Choose Analysis Type" dialog with Quick Analysis and Full Analysis options
    - ❌ **REMOVED** pipeline selection logic from DatasetsSection
-   - ✅ **UPDATED** ProcessingPipeline to use n8n endpoint
+  - ✅ **UPDATED** ProcessingPipeline to use the backend n8n bridge
    - ✅ **ADDED** n8nAnalysisModules() API function
    - Now analysis runs directly without prompting user for pipeline choice
 
@@ -27,7 +27,7 @@
    - ✅ [N8N_SETUP_GUIDE.md](./N8N_SETUP_GUIDE.md) - Detailed setup with all 10 modules
    - ✅ [N8N_SETUP_COMPLETE.md](./N8N_SETUP_COMPLETE.md) - Complete integration guide
    - ✅ [N8N_WORKFLOW_QUICK_REFERENCE.md](./N8N_WORKFLOW_QUICK_REFERENCE.md) - Ready-to-use code
-   - ✅ [backend/.env.example.n8n](./.env.example.n8n) - Environment configuration template
+  - ✅ Configure `backend/.env` with `N8N_BASE_URL`, `N8N_ENABLED`, and `N8N_WORKFLOW_FULL_ANALYSIS`
 
 ## 📊 Architecture Overview
 
@@ -47,7 +47,7 @@ Return Results
 User Click Analyze
     ↓ (No Dialog!)
 ↓
-Send to N8N Webhook
+Send to Backend N8N Bridge
     ↓
 N8N Runs All 10 Modules in Workflow
     ↓
@@ -125,9 +125,9 @@ Expected response:
 ```
 
 ### Step 7: Configure Backend
-1. Copy `backend/.env.example.n8n` to `backend/.env`
-2. Update `OPENAI_API_KEY` with your actual key
-3. Verify `N8N_BASE_URL=http://localhost:5678`
+1. Update `backend/.env` with `N8N_BASE_URL=http://localhost:5678`
+2. Add `N8N_WORKFLOW_FULL_ANALYSIS=full-analysis-workflow`
+3. Update `OPENAI_API_KEY` with your actual key if your n8n workflow uses it
 4. Restart backend: `npm run dev`
 
 ### Step 8: Test Full Flow
@@ -149,8 +149,8 @@ researchlens/
 │   │   │   ├── n8nBridge.js (NEW - n8n integration)
 │   │   │   └── ... (existing modules still available as fallback)
 │   │   └── ...
-│   ├── .env (UPDATE with N8N_BASE_URL)
-│   └── .env.example.n8n (NEW - template)
+│   ├── .env (UPDATE with N8N_BASE_URL and N8N_WORKFLOW_FULL_ANALYSIS)
+│   └── backend/.env (manual n8n config)
 │
 ├── frontend/
 │   ├── src/
@@ -256,7 +256,7 @@ n8n start
 # Test connectivity
 curl http://localhost:5678/api/v1/health
 
-# Check N8N_BASE_URL in .env
+# Check N8N_BASE_URL in backend/.env
 echo $N8N_BASE_URL
 ```
 

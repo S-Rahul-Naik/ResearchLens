@@ -1,16 +1,18 @@
 # N8N Workflow Setup Guide for ResearchLens
 
-This guide helps you set up n8n workflows to replace the local analysis modules.
+This guide covers the n8n bridge used by ResearchLens. The frontend still talks to the backend, and the backend forwards analysis requests to n8n.
 
 ## Prerequisites
 
 1. **N8N Installation**: `npm install -g n8n`
 2. **N8N Running**: Start n8n with `n8n start` (runs on http://localhost:5678)
-3. **OpenAI API Key**: Set `OPENAI_API_KEY` environment variable
-4. **Backend N8N Config**: Set in `.env`:
+3. **OpenAI API Key**: Set `OPENAI_API_KEY` environment variable if your workflow uses OpenAI nodes
+4. **Backend N8N Config**: Set in `backend/.env`:
    ```
    N8N_BASE_URL=http://localhost:5678
    N8N_ENABLED=true
+  N8N_API_KEY=
+  N8N_WORKFLOW_FULL_ANALYSIS=full-analysis-workflow
    ```
 
 ## Workflow Setup Steps
@@ -27,10 +29,10 @@ Access at: http://localhost:5678
 
 In N8N UI:
 - Go to Settings → Credentials
-- Add OpenAI API credential
-- Add HTTP Basic Auth if needed for backend communication
+- Add OpenAI API credential if your workflow uses model nodes
+- Add HTTP Basic Auth or API key credentials only if you protect the webhook manually
 
-### 3. Create Master Workflow: "full-analysis-workflow"
+### 3. Create Master Workflow: `full-analysis-workflow`
 
 This is the main workflow that orchestrates all modules.
 
@@ -65,9 +67,54 @@ Format Results
 Return JSON Response
 ```
 
+**Expected webhook path:** `full-analysis-workflow`
+
+**Expected input from the backend:**
+```json
+{
+  "papers": [
+    {
+      "id": "paper_id",
+      "title": "string",
+      "authors": [],
+      "year": 2024,
+      "abstract": "string",
+      "content": "string",
+      "keywords": []
+    }
+  ],
+  "question": "What are the key findings and open research gaps?",
+  "timestamp": "2026-05-13T00:00:00.000Z"
+}
+```
+
+**Expected response shape:**
+```json
+{
+  "module1": {},
+  "module2": {},
+  "module3": {},
+  "module4": {},
+  "module5": {},
+  "module6": {},
+  "module7": {},
+  "module8": {},
+  "module9": {},
+  "module10": {},
+  "reportTitle": "string",
+  "reportSummary": "string",
+  "reportMarkdown": "string",
+  "reportHighlights": [],
+  "confidence": 0.85,
+  "processingTimeMs": 0
+}
+```
+
 ## Individual Workflow Configurations
 
 ### Module 1: Summarization Workflow
+
+Use this only if you want to invoke a module independently. The main app flow uses the full-analysis webhook above through `POST /api/modules/n8n-analysis`.
 
 **Input:**
 ```json
@@ -443,7 +490,7 @@ curl -X POST http://localhost:5678/webhook/full-analysis-workflow \
 
 The backend will:
 1. Extract papers from MongoDB
-2. Send to N8N webhook
+2. Send to the n8n webhook
 3. Wait for response
 4. Save results to AnalysisReport model
 5. Return to frontend
