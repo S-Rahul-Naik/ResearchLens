@@ -19,7 +19,7 @@ function AnimatedBar({ value, max = 1, color }: { value: number; max?: number; c
 
 function ScoreBadge({ gap }: { gap: ResearchGap }) {
   const [visible, setVisible] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout>>();
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const strength = gap.gapScore >= 0.7 ? 'Strong' : gap.gapScore >= 0.4 ? 'Moderate' : 'Weak';
   const badgeColor = gap.gapScore >= 0.7 ? 'bg-rose-50 text-rose-600 border-rose-200' : gap.gapScore >= 0.4 ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-gray-100 text-gray-600 border-gray-200';
   const strengthColor = gap.gapScore >= 0.7 ? 'text-rose-500' : gap.gapScore >= 0.4 ? 'text-amber-500' : 'text-gray-400';
@@ -32,8 +32,8 @@ function ScoreBadge({ gap }: { gap: ResearchGap }) {
         <div className="absolute bottom-full right-0 mb-2 z-50 w-60 bg-gray-900 text-white rounded-xl pointer-events-none" style={{ boxShadow: '0 8px 24px rgba(0,0,0,0.25)', animation: 'fadeInUp .12s ease' }}>
           <div className="p-3.5 space-y-2">
             <div className="flex justify-between"><span className="text-[10px] text-gray-400 uppercase tracking-widest font-bold">Gap Score</span><span className={`text-xs font-bold ${strengthColor}`}>{strength} Gap</span></div>
-            <div className="bg-gray-800 rounded-lg px-2.5 py-1.5 font-mono text-[10px] text-teal-300">{gap.similarityScore.toFixed(2)} × 1/({gap.coOccurrenceCount}+1) = <strong>{gap.gapScore.toFixed(3)}</strong></div>
-            <p className="text-[10px] text-gray-300 leading-relaxed">{gap.gapScore >= 0.7 ? 'Prime unexplored area — very high semantic overlap, nearly no joint research.' : gap.gapScore >= 0.4 ? 'Meaningful overlap with limited bridging work in the literature.' : 'Some bridging work exists but remains underexplored.'}</p>
+            <div className="bg-gray-800 rounded-lg px-2.5 py-1.5 font-mono text-[10px] text-teal-300">Multi-factor score: semantic proximity + temporal distance + methodology contrast + task overlap + architecture distance + rarity + co-occurrence scarcity = <strong>{gap.gapScore.toFixed(3)}</strong></div>
+            <p className="text-[10px] text-gray-300 leading-relaxed">{gap.gapScore >= 0.7 ? 'Prime unexplored area — strong semantic proximity with a clear methodological bridge and low direct coupling.' : gap.gapScore >= 0.4 ? 'Meaningful research opportunity with moderate evidence and limited bridging work.' : 'Potentially interesting, but the available evidence is weaker or less specific.'}</p>
           </div>
           <div className="absolute -bottom-1.5 right-4 w-3 h-1.5 overflow-hidden"><div className="w-2.5 h-2.5 bg-gray-900 rotate-45 translate-y-1 mx-auto" /></div>
         </div>
@@ -104,7 +104,12 @@ export default function GapCard({ gap, onClick, selected = false, selectMode = f
 
       <div className="mx-5 mb-3 px-3 py-2.5 rounded-lg bg-gray-50 border border-gray-100 flex items-start gap-2">
         <i className="ri-lightbulb-line text-amber-500 flex-shrink-0 text-xs mt-px" />
-        <p className="text-[11px] text-gray-600 leading-relaxed">{insightLine(gap)}</p>
+        <div>
+          <p className="text-[11px] text-gray-600 leading-relaxed">{insightLine(gap)}</p>
+          {gap.llm_gap_explanation && (
+            <p className="text-[11px] text-teal-700 leading-relaxed mt-2 font-medium">{gap.llm_gap_explanation}</p>
+          )}
+        </div>
       </div>
 
       <div className="px-5 pb-4">

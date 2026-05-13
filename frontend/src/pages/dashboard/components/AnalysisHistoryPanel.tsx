@@ -5,9 +5,9 @@ interface Props {
   open: boolean;
   onClose: () => void;
   onViewRun?: (run: AnalysisRun) => void;
-  runs: AnalysisRun[];
-  removeRun: (id: string) => void;
-  clearAll: () => void;
+  runs?: AnalysisRun[];
+  removeRun?: (id: string) => void;
+  clearAll?: () => void;
 }
 
 function timeAgo(ts: number): string {

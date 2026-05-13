@@ -28,6 +28,7 @@ export default function EvaluationSummarySection({ backendResult }: { backendRes
   const totalTopics = topics.length;
   const totalGaps = gaps.length;
   const highConfGaps = gaps.filter(g => g.gapScore > 0.5).length;
+  const honestyScore = br?.modules.module10?.honestyScore ?? 0;
 
   const avgCoherence = topics.length > 0
     ? topics.reduce((s, t) => s + t.coherence, 0) / topics.length
@@ -104,6 +105,12 @@ export default function EvaluationSummarySection({ backendResult }: { backendRes
           value={modelQuality}
           color="#8b5cf6"
           description="Composite score of coherence, coverage, and gap novelty weighted by dataset size and topic distribution balance."
+        />
+        <MetricGauge
+          label="Scientific Honesty"
+          value={honestyScore}
+          color="#475569"
+          description="Summarizes how strongly the outputs are supported by coverage, reliability, and sufficiency checks."
         />
       </div>
 

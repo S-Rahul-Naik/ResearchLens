@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { type ResearchGap } from '../../../../mocks/gaps';
+import type { BackendPaper, ChatbotResult } from '../../../..//lib/api';
+import { askChatbot } from '../../../../lib/api';
 import ResearchProposal from './ResearchProposal';
 
 function ShareToast({ message, onDone }: { message: string; onDone: () => void }) {
@@ -61,9 +63,9 @@ function ProfileBar({ label, count, max, color, note }: { label: string; count: 
   );
 }
 
-interface Props { gap: ResearchGap; currentIndex: number; totalCount: number; onNavigate: (dir: 'prev' | 'next') => void; onClose: () => void; }
+interface Props { gap: ResearchGap; papers?: BackendPaper[]; currentIndex: number; totalCount: number; onNavigate: (dir: 'prev' | 'next') => void; onClose: () => void; }
 
-export default function GapDetailPanel({ gap, currentIndex, totalCount, onNavigate, onClose }: Props) {
+export default function GapDetailPanel({ gap, papers = [], currentIndex, totalCount, onNavigate, onClose }: Props) {
   const panelRef = useRef<HTMLDivElement>(null);
   const [shareOpen, setShareOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -73,9 +75,11 @@ export default function GapDetailPanel({ gap, currentIndex, totalCount, onNaviga
   const papersA = gap.paperIdsInA ?? [];
   const papersB = gap.paperIdsInB ?? [];
   const papersBridge = gap.paperIdsBridging ?? [];
-  const topicAName = gap.topicAName || gap.topicALabel || gap.topicA || 'Topic A';
-  const topicBName = gap.topicBName || gap.topicBLabel || gap.topicB || 'Topic B';
+  const topicAName = gap.topicAName || gap.topicAId || 'Topic A';
+  const topicBName = gap.topicBName || gap.topicBId || 'Topic B';
   const maxProfile = Math.max(papersA.length, papersB.length, 1);
+  const [ragLoading, setRagLoading] = useState(false);
+  const [ragResult, setRagResult] = useState<ChatbotResult | null>(null);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -98,6 +102,20 @@ export default function GapDetailPanel({ gap, currentIndex, totalCount, onNaviga
   const copyLink = async () => {
     await navigator.clipboard.writeText(`${window.location.origin}${window.location.pathname}?gap=${gap.id}`);
     setToast('Link copied!'); setShareOpen(false);
+  };
+
+  const fetchRag = async () => {
+    if (!papers || papers.length === 0) return;
+    setRagLoading(true); setRagResult(null);
+    try {
+      const question = `Explain why the gap between "${gap.topicAName}" and "${gap.topicBName}" is significant, and cite evidence paper IDs: ${gap.paperIdsBridging?.join(', ') || ''}`;
+      const res = await askChatbot(papers, question);
+      setRagResult(res as ChatbotResult);
+    } catch (err) {
+      console.error('RAG fetch failed', err);
+    } finally {
+      setRagLoading(false);
+    }
   };
 
   return (
@@ -227,7 +245,59 @@ export default function GapDetailPanel({ gap, currentIndex, totalCount, onNaviga
                 </div>
                 <div className="mt-3 p-3 bg-teal-50 border border-teal-100 rounded-xl">
                   <p className="text-xs text-teal-900 leading-relaxed"><i className="ri-lightbulb-line text-teal-600 mr-1.5" />{gap.explanation}</p>
+                  {gap.llm_gap_explanation && (
+                    <p className="text-xs text-teal-800 leading-relaxed mt-2 font-semibold">{gap.llm_gap_explanation}</p>
+                  )}
+                  {gap.llm_gap_significance && (
+                    <p className="text-xs text-teal-700 leading-relaxed mt-1.5 border-t border-teal-200 pt-2"><strong>Why it matters:</strong> {gap.llm_gap_significance}</p>
+                  )}
+                  {gap.llm_integration_opportunity && (
+                    <p className="text-xs text-teal-700 leading-relaxed mt-1.5 border-t border-teal-200 pt-2"><strong>Integration opportunity:</strong> {gap.llm_integration_opportunity}</p>
+                  )}
                 </div>
+                <div className="mt-3 flex items-start gap-3">
+                  <button onClick={fetchRag} className={`whitespace-nowrap flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg ${ragLoading ? 'bg-gray-200 text-gray-700' : 'bg-teal-600 text-white hover:bg-teal-700'}`} disabled={ragLoading || papers.length === 0}>
+                    <i className="ri-brain-line" /> {ragLoading ? 'Explaining...' : 'Explain (RAG)'}
+                  </button>
+                  <div className="text-xs text-gray-500">Uses Ollama to generate an evidence-based explanation that cites paper IDs and snippets.</div>
+                </div>
+
+                {ragResult && (
+                  <div className="mt-4 p-3 rounded-lg bg-white border border-gray-100 space-y-3">
+                    <div className="text-sm font-semibold text-gray-800">AI Explanation</div>
+                    <div className="text-sm text-gray-700 leading-relaxed">{ragResult.answer}</div>
+                    {ragResult.citations && ragResult.citations.length > 0 && (
+                      <div>
+                        <div className="text-xs font-semibold text-gray-500 mb-1">Citations</div>
+                        <div className="space-y-2">
+                          {ragResult.citations.map(c => (
+                            <div key={c.paperId} className="p-2 rounded border border-gray-100 bg-gray-50">
+                              <div className="text-[11px] font-medium">{c.title} <span className="text-xs text-gray-400">({c.paperId})</span></div>
+                              {c.snippet && <div className="text-[12px] text-gray-600 mt-1">"{c.snippet}..."</div>}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {ragResult.gapEvidences && ragResult.gapEvidences.length > 0 && (
+                      <div>
+                        <div className="text-xs font-semibold text-gray-500 mb-1">Gap Evidence</div>
+                        <div className="space-y-2">
+                          {ragResult.gapEvidences.map(g => (
+                            <div key={String(g.gapId)} className="p-2 rounded border border-gray-100">
+                              <div className="text-[11px] font-medium text-gray-700">Evidence for gap {g.gapId ?? '—'}</div>
+                              <div className="mt-1 text-[12px] text-gray-600 space-y-1">
+                                {g.evidences.map(ev => (
+                                  <div key={ev.paperId}>• {ev.title} <span className="text-xs text-gray-400">({ev.paperId})</span> — <span className="italic">"{ev.snippet}..."</span></div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </section>
 
               {/* § 4 Evidence */}
@@ -248,7 +318,25 @@ export default function GapDetailPanel({ gap, currentIndex, totalCount, onNaviga
                 {papersBridge.length > 0 ? (
                   <div>
                     <p className="text-xs font-semibold text-violet-700 mb-2 flex items-center gap-1.5"><i className="ri-links-line" />Bridging Papers ({papersBridge.length})</p>
-                    <div className="space-y-1.5">{papersBridge.map(id => <PaperRow key={id} id={id} accent="violet" />)}</div>
+                    {gap.llm_verified_bridging_papers && gap.llm_verified_bridging_papers.length > 0 ? (
+                      <div className="space-y-2">
+                        {gap.llm_verified_bridging_papers.map((paper, idx) => (
+                          <div key={idx} className="p-2.5 rounded-lg bg-violet-50 border border-violet-100">
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="text-xs font-medium text-violet-900 flex-1">{paper.title || `Paper ${idx + 1}`}</p>
+                              {paper.llm_is_bridging && (
+                                <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-green-100 text-green-700 flex-shrink-0">✓ Bridges</span>
+                              )}
+                            </div>
+                            {paper.llm_bridging_evidence && (
+                              <p className="text-[10px] text-violet-700 mt-1.5 leading-relaxed">{paper.llm_bridging_evidence}</p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5">{papersBridge.map(id => <PaperRow key={id} id={id} accent="violet" />)}</div>
+                    )}
                   </div>
                 ) : (
                   <div className="flex items-center gap-2.5 p-3 bg-rose-50 border border-rose-100 rounded-xl">

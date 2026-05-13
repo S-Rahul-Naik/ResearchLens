@@ -5,6 +5,10 @@ const analysisReportSchema = new mongoose.Schema(
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     name: { type: String, required: true },
     description: { type: String, default: '' },
+    reportTitle: { type: String, default: '' },
+    reportSummary: { type: String, default: '' },
+    reportMarkdown: { type: String, default: '' },
+    reportHighlights: { type: [String], default: [] },
     
     // Paper info
     paperIds: [{ type: String }],
@@ -24,11 +28,14 @@ const analysisReportSchema = new mongoose.Schema(
     module7: { type: mongoose.Schema.Types.Mixed, default: null }, // Contradiction Detection
     module8: { type: mongoose.Schema.Types.Mixed, default: null }, // Dataset/Method Matrix
     module9: { type: mongoose.Schema.Types.Mixed, default: null }, // Related Work
+    module10: { type: mongoose.Schema.Types.Mixed, default: null }, // Scientific Honesty
     
     // Computed metadata
     topicCount: { type: Number, default: 0 },
     gapCount: { type: Number, default: 0 },
     qualityScore: { type: Number, default: 0 },
+    honestyScore: { type: Number, default: 0 },
+    reportConfidence: { type: Number, default: 0 },
     processingTimeMs: { type: Number, default: 0 },
     
     isPublic: { type: Boolean, default: false },

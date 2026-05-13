@@ -265,10 +265,11 @@ function buildPrintHTML(backendResult?: RunAllResult | null): string {
   const topics = backendResult?.modules.module2.topics ?? [];
   const summaries = backendResult?.modules.module1.summaries ?? [];
   const gaps = backendResult?.modules.module3.gaps ?? [];
+  const trends = backendResult?.modules.module4.trends ?? [];
 
   const topicsRows = topics
     .map(t => {
-      const trendEntry = backendResult?.modules.module4.trends.find(tr => tr.topicId === t.topicId);
+      const trendEntry = trends.find(tr => tr.topicId === t.topicId);
       const paperCount = t.paperIds.length;
       return `<tr><td>${t.name}</td><td>${t.keywords.slice(0, 4).join(', ')}</td><td>${paperCount}</td><td>${(t.coherence * 100).toFixed(0)}%</td><td>${trendEntry?.trend ?? 'stable'}</td></tr>`;
     })
@@ -281,7 +282,7 @@ function buildPrintHTML(backendResult?: RunAllResult | null): string {
 
   const papersCount = backendResult?.papersCount ?? 0;
   const yearRange = backendResult
-    ? { start: Math.min(...backendResult.modules.module4.trends.flatMap(t => t.yearlyCounts.map(yc => yc.year))), end: Math.max(...backendResult.modules.module4.trends.flatMap(t => t.yearlyCounts.map(yc => yc.year))) }
+    ? { start: Math.min(...trends.flatMap(t => t.yearlyCounts.map(yc => yc.year))), end: Math.max(...trends.flatMap(t => t.yearlyCounts.map(yc => yc.year))) }
     : { start: new Date().getFullYear(), end: new Date().getFullYear() };
   const qualityScore = backendResult
     ? (() => {
@@ -389,13 +390,30 @@ function buildPrintHTML(backendResult?: RunAllResult | null): string {
 
 // ── Share Report helpers ──────────────────────────────────────────────────────
 function buildTextSummary(backendResult?: RunAllResult | null): string {
+  const generatedReport = backendResult?.analysisReport?.report_markdown?.trim();
+  if (generatedReport) {
+    return generatedReport;
+  }
+
+  const executiveSummary = backendResult?.analysisReport?.executive_summary?.trim();
+  if (executiveSummary) {
+    return [
+      backendResult?.analysisReport?.report_title || 'ResearchLens Analysis Report',
+      '',
+      executiveSummary,
+      '',
+      backendResult?.analysisReport?.scientific_honesty ? `Scientific honesty: ${backendResult.analysisReport.scientific_honesty}` : '',
+    ].filter(Boolean).join('\n');
+  }
+
   const topics = backendResult?.modules.module2.topics ?? [];
   const gaps = [...(backendResult?.modules.module3.gaps ?? [])].sort((a, b) => b.gapScore - a.gapScore);
   const top3Gaps = gaps.slice(0, 3);
-  const risingTopics = backendResult?.modules.module4.trends.filter(t => t.trend === 'rising') ?? [];
+  const trends = backendResult?.modules.module4.trends ?? [];
+  const risingTopics = trends.filter(t => t.trend === 'rising');
   const papers = backendResult?.papersCount ?? 0;
   const yearRange = backendResult
-    ? { start: Math.min(...backendResult.modules.module4.trends.flatMap(t => t.yearlyCounts.map(yc => yc.year))), end: Math.max(...backendResult.modules.module4.trends.flatMap(t => t.yearlyCounts.map(yc => yc.year))) }
+    ? { start: Math.min(...trends.flatMap(t => t.yearlyCounts.map(yc => yc.year))), end: Math.max(...trends.flatMap(t => t.yearlyCounts.map(yc => yc.year))) }
     : { start: new Date().getFullYear(), end: new Date().getFullYear() };
   const modelQuality = backendResult
     ? (() => {

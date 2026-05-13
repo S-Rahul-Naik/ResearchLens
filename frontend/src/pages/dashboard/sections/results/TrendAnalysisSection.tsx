@@ -7,6 +7,7 @@ const TREND_CONFIG = {
   rising: { label: 'Rising', icon: 'ri-arrow-right-up-line', color: 'text-emerald-600', bg: 'bg-emerald-50' },
   stable: { label: 'Stable', icon: 'ri-arrow-right-line', color: 'text-amber-600', bg: 'bg-amber-50' },
   declining: { label: 'Declining', icon: 'ri-arrow-right-down-line', color: 'text-rose-600', bg: 'bg-rose-50' },
+  insufficient_data: { label: 'Insufficient', icon: 'ri-alert-line', color: 'text-slate-600', bg: 'bg-slate-50' },
 };
 
 export default function TrendAnalysisSection({ backendResult }: { backendResult?: RunAllResult | null }) {
@@ -15,9 +16,16 @@ export default function TrendAnalysisSection({ backendResult }: { backendResult?
   // Normalize to a common display type
   interface DisplayTrend {
     topicId: string; topicName: string; color: string;
-    trend: 'rising' | 'stable' | 'declining';
+    trend: 'rising' | 'stable' | 'declining' | 'insufficient_data';
     growthRate: number; peakYear: number;
     dataPoints: { year: number; count: number }[];
+    trendMessage?: string;
+    temporalConfidence?: number;
+    reliability?: number;
+    llmTrendSummary?: string;
+    llmParadigmShifts?: string[];
+    llmReliabilityExplanation?: string;
+    llmConfidence?: number;
   }
 
   const trends: DisplayTrend[] = br
@@ -27,7 +35,22 @@ export default function TrendAnalysisSection({ backendResult }: { backendResult?
         const maxC = Math.max(...t.yearlyCounts.map(yc => yc.count), 1);
         const minC = Math.min(...t.yearlyCounts.map(yc => yc.count), 0);
         const growthRate = maxC > 0 ? (maxC - minC) / maxC : 0;
-        return { topicId: t.topicId, topicName: t.topicName, color, trend: t.trend, growthRate, peakYear: peak.year, dataPoints: t.yearlyCounts };
+        return {
+          topicId: t.topicId,
+          topicName: t.topicName,
+          color,
+          trend: t.trend,
+          growthRate,
+          peakYear: peak.year,
+          dataPoints: t.yearlyCounts,
+          trendMessage: (t as any).trendMessage,
+          temporalConfidence: (t as any).temporalConfidence,
+          reliability: (t as any).reliability,
+          llmTrendSummary: (t as any).llm_trend_summary,
+          llmParadigmShifts: (t as any).llm_paradigm_shifts,
+          llmReliabilityExplanation: (t as any).llm_reliability_explanation,
+          llmConfidence: (t as any).llm_confidence,
+        };
       })
     : mockTrends.map(t => ({ ...t, dataPoints: t.dataPoints }));
 
@@ -68,7 +91,7 @@ export default function TrendAnalysisSection({ backendResult }: { backendResult?
       {/* Per-topic bars */}
       <div className="space-y-4">
         {[...trends].sort((a, b) => b.growthRate - a.growthRate).map(topic => {
-          const trend = TREND_CONFIG[topic.trend];
+          const trend = TREND_CONFIG[topic.trend] ?? TREND_CONFIG.stable;
 
           return (
             <div key={topic.topicId} className="bg-white rounded-xl border border-gray-100 p-5">
@@ -83,6 +106,33 @@ export default function TrendAnalysisSection({ backendResult }: { backendResult?
                 <span className="text-xs text-gray-400 ml-auto"></span>
                 <span className="text-xs text-gray-400">Peak: <strong className="text-gray-700">{topic.peakYear}</strong></span>
               </div>
+
+              {(topic.llmTrendSummary || topic.llmParadigmShifts?.length || topic.llmReliabilityExplanation) && (
+                <div className="mb-3 rounded-lg border border-teal-100 bg-teal-50 px-3 py-2 text-[11px] text-teal-900 leading-relaxed space-y-1.5">
+                  {topic.llmTrendSummary && <p>{topic.llmTrendSummary}</p>}
+                  {topic.llmParadigmShifts && topic.llmParadigmShifts.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {topic.llmParadigmShifts.map((shift) => (
+                        <span key={shift} className="inline-flex items-center rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold text-teal-700 border border-teal-100">
+                          {shift}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {typeof topic.llmConfidence === 'number' && (
+                    <p className="text-[10px] text-teal-700">LLM confidence: {Math.round(topic.llmConfidence * 100)}%</p>
+                  )}
+                  {topic.llmReliabilityExplanation && (
+                    <p className="text-[10px] text-teal-700">{topic.llmReliabilityExplanation}</p>
+                  )}
+                </div>
+              )}
+
+                  {topic.trend === 'insufficient_data' && topic.trendMessage && (
+                    <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-700 leading-relaxed">
+                      {topic.trendMessage}
+                    </div>
+                  )}
 
               {/* Year bar chart */}
               <div className="flex items-end gap-2">

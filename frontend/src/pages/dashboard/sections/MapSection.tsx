@@ -15,7 +15,7 @@ type MapPoint = {
 };
 type AdaptedGap = {
   id: string; topicAId: string; topicBId: string; topicAName: string; topicBName: string;
-  gapScore: number; coOccurrenceCount: number; similarityScore: number; rank: number;
+  gapScore: number; coOccurrenceCount: number; similarityScore: number; reliability?: number; severity?: 'low' | 'moderate' | 'critical'; rank: number;
 };
 type AdaptedTopic = { id: string; name: string; color: string; paperIds: string[] };
 
@@ -76,6 +76,8 @@ export default function MapSection({ backendResult, papers: propPapers = [] }: {
           gapScore: g.gapScore,
           coOccurrenceCount: g.coOccurrence,
           similarityScore: g.similarity,
+          reliability: g.reliability,
+          severity: g.severity,
         }))
         .sort((a, b) => b.gapScore - a.gapScore)
         .map((gap, index) => ({ ...gap, rank: index + 1 }));
@@ -420,9 +422,9 @@ export default function MapSection({ backendResult, papers: propPapers = [] }: {
 
                       const isHovered = hoveredGapId === gap.id;
                       const isZero = gap.coOccurrenceCount === 0;
-                      const strokeColor = isZero ? '#ef4444' : '#f59e0b';
-                      const strokeW = isHovered ? 2.5 : 1.5;
-                      const opacity = isHovered ? 0.95 : 0.55;
+                      const strokeColor = gap.severity === 'critical' || isZero ? '#e11d48' : gap.severity === 'moderate' ? '#f59e0b' : '#94a3b8';
+                      const strokeW = isHovered ? 2.6 : Math.max(1.1, gap.gapScore * 2.2);
+                      const opacity = isHovered ? 0.95 : Math.max(0.18, gap.gapScore * 0.55);
                       const mx = (cA.cx + cB.cx) / 2;
                       const my = (cA.cy + cB.cy) / 2;
 

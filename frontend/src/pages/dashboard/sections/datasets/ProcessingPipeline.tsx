@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import type { Paper } from '../../../../mocks/papers';
-import { runAllModules, type RunAllResult } from '../../../../lib/api';
+import { runAllModules, quickAnalysisModules, n8nAnalysisModules, type RunAllResult } from '../../../../lib/api';
 
 /* ─── Types ─────────────────────────────────────────────── */
 type StageStatus = 'waiting' | 'running' | 'done' | 'error';
@@ -186,12 +186,13 @@ function StageDot({ status, stage }: { status: StageStatus; stage: typeof STAGES
 interface Props {
   papers: Paper[];
   runName?: string;
+  analysisType?: 'quick' | 'full';
   onComplete: (result: RunAllResult | null) => void;
   onCancel: () => void;
 }
 
 /* ─── Main Component ─────────────────────────────────────── */
-export default function ProcessingPipeline({ papers, runName, onComplete, onCancel }: Props) {
+export default function ProcessingPipeline({ papers, runName, analysisType = 'full', onComplete, onCancel }: Props) {
   const [progress, setProgress] = useState<PaperProgress[]>(() => initProgress(papers));
   const [log, setLog] = useState<LogEntry[]>([]);
   const [done, setDone] = useState(false);
@@ -203,6 +204,7 @@ export default function ProcessingPipeline({ papers, runName, onComplete, onCanc
   const startTimeRef = useRef<number>(Date.now());
   const backendResultRef = useRef<RunAllResult | null>(null);
   const backendPromiseRef = useRef<Promise<RunAllResult | null> | null>(null);
+  const apiCalledRef = useRef(false);
 
   const addLog = useCallback((text: string, level: LogEntry['level'] = 'info') => {
     setLog(prev => {
@@ -231,15 +233,26 @@ export default function ProcessingPipeline({ papers, runName, onComplete, onCanc
       question: 'What are the key findings, research gaps and emerging topics?',
       reportName: runName || undefined,
     };
-    backendPromiseRef.current = runAllModules(backendPayload)
-      .then((result) => {
-        backendResultRef.current = result;
-        return result;
-      })
-      .catch(() => {
-        backendResultRef.current = null;
-        return null;
-      });
+    // Call either quick or full analysis based on analysisType
+    // Guard against StrictMode double-calling: only make API call once
+    if (!apiCalledRef.current) {
+      apiCalledRef.current = true;
+      const analysisPromise = analysisType === 'n8n' 
+        ? n8nAnalysisModules(backendPayload)
+        : analysisType === 'quick' 
+        ? quickAnalysisModules(backendPayload)
+        : runAllModules(backendPayload);
+      
+      backendPromiseRef.current = analysisPromise
+        .then((result: any) => {
+          backendResultRef.current = result as RunAllResult;
+          return result as RunAllResult;
+        })
+        .catch(() => {
+          backendResultRef.current = null;
+          return null;
+        });
+    }
 
     const run = async () => {
       addLog('Pipeline started — processing ' + papers.length + ' paper(s)', 'info');
@@ -306,13 +319,17 @@ export default function ProcessingPipeline({ papers, runName, onComplete, onCanc
 
         const backendResult = await (backendPromiseRef.current ?? Promise.resolve(null));
         if (backendResult) {
-          addLog('Backend analysis complete — ' + backendResult.modules.module3.gaps.length + ' gaps detected', 'success');
+          const gapCount = (backendResult as any).modules?.module3?.gaps?.length ?? 0;
+          const reportMsg = gapCount > 0 
+            ? `Backend analysis complete — ${gapCount} gaps detected`
+            : 'Backend analysis complete — report generated';
+          addLog(reportMsg, 'success');
           setProgress(prev => prev.map((paper) => ({
             ...paper,
             stages: paper.stages.map((st, i) => i === 5 ? 'done' : st) as StageStatus[],
           })));
         } else {
-          addLog('Backend analysis did not return a result.', 'error');
+          addLog('Backend analysis did not return a result.', 'warn');
         }
         setDone(true);
         onComplete(backendResult);
@@ -596,7 +613,7 @@ export default function ProcessingPipeline({ papers, runName, onComplete, onCanc
                 <span className="text-sm font-semibold">Pipeline complete — {papers.length} papers processed successfully</span>
               </div>
               <button
-                onClick={onComplete}
+                onClick={() => onComplete(backendResultRef.current)}
                 className="whitespace-nowrap flex items-center gap-2 px-5 py-2.5 bg-[#0f766e] text-white text-sm font-semibold rounded-lg hover:bg-[#0d6b62] transition-colors cursor-pointer"
               >
                 View Results

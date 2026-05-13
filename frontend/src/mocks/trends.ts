@@ -6,11 +6,14 @@ export interface TrendDataPoint {
 export interface TopicTrend {
   topicId: string;
   topicName: string;
-  trend: 'rising' | 'stable' | 'declining';
+  trend: 'rising' | 'stable' | 'declining' | 'insufficient_data';
   growthRate: number;
   peakYear: number;
   dataPoints: TrendDataPoint[];
   color: string;
+  trendMessage?: string;
+  temporalConfidence?: number;
+  reliability?: number;
 }
 
 export const mockTrends: TopicTrend[] = [

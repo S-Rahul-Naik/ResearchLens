@@ -1,0 +1,12 @@
+bertopic
+joblib
+keybert
+networkx
+numpy
+pandas
+scikit-learn
+scipy
+sentence-transformers
+spacy
+umap-learn
+hdbscan

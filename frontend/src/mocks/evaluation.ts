@@ -3,6 +3,7 @@ export interface EvaluationMetrics {
   topicCoverage: number;
   gapNovelty: number;
   modelQuality: number;
+  scientificHonesty: number;
   totalPapers: number;
   totalTopics: number;
   totalGaps: number;
@@ -21,6 +22,7 @@ export const mockEvaluation: EvaluationMetrics = {
   topicCoverage: 0.84,
   gapNovelty: 0.91,
   modelQuality: 0.82,
+  scientificHonesty: 0.87,
   totalPapers: 20,
   totalTopics: 8,
   totalGaps: 7,

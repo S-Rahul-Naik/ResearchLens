@@ -24,6 +24,10 @@ interface AdaptedGap {
   topicBName: string;
   gapScore: number;
   explanation: string;
+  reliability?: number;
+  severity?: 'low' | 'moderate' | 'critical';
+  similarityScore?: number;
+  coOccurrenceCount?: number;
 }
 
 interface AdaptedPoint {
@@ -140,16 +144,25 @@ export default function ResearchMapResultsSection({ backendResult }: { backendRe
   const adaptedGaps = useMemo(() => {
     if (!br) return [];
 
+    const gapLookup = new Map(
+      (br.modules.module3.gaps ?? []).map((gap) => [`${gap.topicA}|${gap.topicB}`, gap])
+    );
+
     return br.modules.module5.map.links.map((link, i) => {
-      const mapLink = link as { sourceTopicId: string; targetTopicId: string };
+      const mapLink = link as { sourceTopicId: string; targetTopicId: string; gapScore?: number; severity?: 'low' | 'moderate' | 'critical' };
+      const gap = gapLookup.get(`${mapLink.sourceTopicId}|${mapLink.targetTopicId}`) ?? gapLookup.get(`${mapLink.targetTopicId}|${mapLink.sourceTopicId}`);
       return {
-        id: `gap-${i}`,
+        id: gap?.gapId ?? `gap-${i}`,
         topicAId: mapLink.sourceTopicId,
         topicBId: mapLink.targetTopicId,
         topicAName: br.modules.module2.topics.find(t => t.topicId === mapLink.sourceTopicId)?.name ?? mapLink.sourceTopicId,
         topicBName: br.modules.module2.topics.find(t => t.topicId === mapLink.targetTopicId)?.name ?? mapLink.targetTopicId,
-        gapScore: 0.85,
-        explanation: `Gap between ${br.modules.module2.topics.find(t => t.topicId === mapLink.sourceTopicId)?.name ?? mapLink.sourceTopicId} and ${br.modules.module2.topics.find(t => t.topicId === mapLink.targetTopicId)?.name ?? mapLink.targetTopicId}.`,
+        gapScore: gap?.gapScore ?? mapLink.gapScore ?? 0,
+        explanation: gap?.explanation ?? gap?.recommendation ?? `Gap between ${br.modules.module2.topics.find(t => t.topicId === mapLink.sourceTopicId)?.name ?? mapLink.sourceTopicId} and ${br.modules.module2.topics.find(t => t.topicId === mapLink.targetTopicId)?.name ?? mapLink.targetTopicId}.`,
+        reliability: gap?.reliability,
+        severity: gap?.severity ?? mapLink.severity,
+        similarityScore: gap?.similarity,
+        coOccurrenceCount: gap?.coOccurrence,
       };
     });
   }, [br]);
@@ -356,15 +369,17 @@ export default function ResearchMapResultsSection({ backendResult }: { backendRe
               if (!ca || !cb) return null;
               const isHovered = hoveredGap === gap.id;
               const isDimmed = hoveredGap && !isHovered;
+              const strokeColor = gap.severity === 'critical' ? '#e11d48' : gap.severity === 'moderate' ? '#f59e0b' : '#94a3b8';
+              const strokeWidth = isHovered ? 2.6 : Math.max(1.2, gap.gapScore * 2.2);
               return (
                 <g key={gap.id}>
                   <path
                     d={bezierCurve(ca.x, ca.y, cb.x, cb.y)}
                     fill="none"
-                    stroke={isHovered ? '#e11d48' : '#f43f5e'}
-                    strokeWidth={isHovered ? 2.2 : 1.2}
+                    stroke={strokeColor}
+                    strokeWidth={strokeWidth}
                     strokeDasharray={isHovered ? 'none' : '4 4'}
-                    opacity={isDimmed ? 0.15 : isHovered ? 0.85 : 0.35}
+                    opacity={isDimmed ? 0.12 : isHovered ? 0.9 : Math.max(0.2, gap.gapScore * 0.55)}
                     className="transition-all duration-200"
                     style={{ cursor: 'pointer' }}
                     onMouseEnter={() => setHoveredGap(gap.id)}
@@ -375,8 +390,8 @@ export default function ResearchMapResultsSection({ backendResult }: { backendRe
                     cx={(ca.x + cb.x) / 2}
                     cy={(ca.y + cb.y) / 2 - 10}
                     r={isHovered ? 5 : 3}
-                    fill="#e11d48"
-                    opacity={isDimmed ? 0 : isHovered ? 0.9 : 0.45}
+                    fill={strokeColor}
+                    opacity={isDimmed ? 0 : isHovered ? 0.95 : Math.max(0.3, gap.gapScore * 0.7)}
                     className="transition-all duration-200"
                     style={{ cursor: 'pointer' }}
                     onMouseEnter={() => setHoveredGap(gap.id)}

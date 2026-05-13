@@ -4,9 +4,39 @@ export interface Topic {
   keywords: string[];
   paperIds: string[];
   coherenceScore: number;
-  trend: 'rising' | 'stable' | 'declining';
+  trend: 'rising' | 'stable' | 'declining' | 'insufficient_data';
   centroid?: number[];
   color: string;
+  // LLM-enhanced fields
+  llm_label?: string;
+  llm_domain_summary?: string;
+  llm_methodological_theme?: string;
+  llm_paradigm?: string;
+  llm_confidence?: number;
+  heuristic_label?: string;
+}
+
+export interface Paper {
+  id: string;
+  title: string;
+  authors: string[];
+  abstract?: string;
+  year: number;
+}
+
+export interface TopicTrend {
+  topicId: string;
+  topicName: string;
+  trend: 'rising' | 'stable' | 'declining' | 'insufficient_data';
+  dataPoints: { year: number; count: number }[];
+  growthRate?: number;
+  peakYear?: number;
+  color?: string;
+  confidenceInterval?: [number, number];
+  yearlyCoverage?: number;
+  temporalConfidence?: number;
+  reliability?: number;
+  trendMessage?: string;
 }
 
 export const mockTopics: Topic[] = [

@@ -1,0 +1,221 @@
+{
+  "name": "ResearchLens 5-Section Analysis",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "researchlens-5-section-analysis",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "b7f0f49a-3e2e-4f53-9b5d-1f2c7e7a0001",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [240, 300],
+      "webhookId": "researchlens-5-section-analysis"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body ?? $json;\nconst papers = Array.isArray(body.papers) ? body.papers : [];\nif (!papers.length) {\n  throw new Error('Request body must include a non-empty papers array.');\n}\nreturn [{\n  json: {\n    papers,\n    question: body.question ?? 'What are the key findings?',\n    reportName: body.reportName ?? 'Research Analysis Report',\n    createdAt: new Date().toISOString(),\n  },\n}];"
+      },
+      "id": "b7f0f49a-3e2e-4f53-9b5d-1f2c7e7a0002",
+      "name": "Prepare Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.RESEARCHLENS_SUMMARY_URL || 'http://localhost:4000/api/modules/summarize' }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParametersJson": "{\n  \"Content-Type\": \"application/json\",\n  \"Accept\": \"application/json\"\n}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ papers: $('Prepare Input').first().json.papers, question: $('Prepare Input').first().json.question, reportName: $('Prepare Input').first().json.reportName }) }}",
+        "options": {}
+      },
+      "id": "b7f0f49a-3e2e-4f53-9b5d-1f2c7e7a0003",
+      "name": "Module 1 - Summarization",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [740, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParametersJson": "{\n  \"Content-Type\": \"application/json\",\n  \"Authorization\": \"Bearer {{$env.OPENAI_API_KEY}}\"\n}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $env.OPENAI_MODEL || 'gpt-4o-mini', temperature: 0.2, response_format: { type: 'json_object' }, messages: [ { role: 'system', content: 'You are a research gap analysis engine. Return JSON with keys gaps, assumptions, evidenceSummary, and confidence.' }, { role: 'user', content: `Question: ${$('Prepare Input').first().json.question}\n\nSummaries:\n${JSON.stringify($('Module 1 - Summarization').first().json, null, 2)}` } ] }) }}",
+        "options": {}
+      },
+      "id": "b7f0f49a-3e2e-4f53-9b5d-1f2c7e7a0004",
+      "name": "Module 2 - Gap Detection",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1000, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const summaryResult = $('Module 1 - Summarization').first().json;\nconst gapResponse = $('Module 2 - Gap Detection').first().json;\nconst gapText = gapResponse.choices?.[0]?.message?.content ?? gapResponse;\nlet gapData = gapText;\nif (typeof gapText === 'string') {\n  try {\n    gapData = JSON.parse(gapText);\n  } catch (error) {\n    gapData = { raw: gapText };\n  }\n}\nconst papers = summaryResult.summaries ?? summaryResult.data?.summaries ?? summaryResult.items ?? [];\nconst wordCounts = new Map();\nfor (const paper of papers) {\n  const text = `${paper.title ?? ''} ${paper.summary ?? ''} ${paper.abstract ?? ''}`.toLowerCase();\n  for (const word of text.match(/[a-z0-9]{4,}/g) ?? []) {\n    wordCounts.set(word, (wordCounts.get(word) ?? 0) + 1);\n  }\n}\nconst trends = [...wordCounts.entries()]\n  .sort((left, right) => right[1] - left[1])\n  .slice(0, 8)\n  .map(([term, count]) => ({ term, count }));\nreturn [{\n  json: {\n    trends,\n    topThemes: trends.slice(0, 5),\n    loopCount: papers.length,\n    gapData,\n  },\n}];"
+      },
+      "id": "b7f0f49a-3e2e-4f53-9b5d-1f2c7e7a0005",
+      "name": "Module 3 - Trend Detection",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1260, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const summaryResult = $('Module 1 - Summarization').first().json;\nconst trendResult = $('Module 3 - Trend Detection').first().json;\nconst papers = summaryResult.summaries ?? [];\nconst chartData = papers.map((paper, index) => ({\n  label: paper.title ?? `Paper ${index + 1}`,\n  value: (paper.summary ?? paper.abstract ?? '').length,\n}));\nreturn [{\n  json: {\n    visualizationType: 'bar',\n    chartData,\n    trendHighlights: trendResult.topThemes ?? [],\n    legend: ['Summary Length'],\n    note: 'Frontend can render this as a bar or radar chart.',\n  },\n}];"
+      },
+      "id": "b7f0f49a-3e2e-4f53-9b5d-1f2c7e7a0006",
+      "name": "Module 4 - Visualization",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1520, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParametersJson": "{\n  \"Content-Type\": \"application/json\",\n  \"Authorization\": \"Bearer {{$env.OPENAI_API_KEY}}\"\n}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $env.OPENAI_MODEL || 'gpt-4o-mini', temperature: 0.2, response_format: { type: 'json_object' }, messages: [ { role: 'system', content: 'You are a research assistant chatbot. Answer only from the provided analysis context. Return JSON with answer, followUps, citations, and confidence.' }, { role: 'user', content: `Question: ${$('Prepare Input').first().json.question}\n\nSummaries:\n${JSON.stringify($('Module 1 - Summarization').first().json, null, 2)}\n\nGaps:\n${JSON.stringify($('Module 3 - Trend Detection').first().json.gapData, null, 2)}\n\nTrends:\n${JSON.stringify($('Module 3 - Trend Detection').first().json.topThemes, null, 2)}\n\nVisualization:\n${JSON.stringify($('Module 4 - Visualization').first().json, null, 2)}` } ] }) }}",
+        "options": {}
+      },
+      "id": "b7f0f49a-3e2e-4f53-9b5d-1f2c7e7a0007",
+      "name": "Module 5 - Chatbot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('Prepare Input').first().json;\nconst summaryResult = $('Module 1 - Summarization').first().json;\nconst gapResponse = $('Module 2 - Gap Detection').first().json;\nconst gapText = gapResponse.choices?.[0]?.message?.content ?? gapResponse;\nlet gapData = gapText;\nif (typeof gapText === 'string') {\n  try {\n    gapData = JSON.parse(gapText);\n  } catch (error) {\n    gapData = { raw: gapText };\n  }\n}\nconst trendResult = $('Module 3 - Trend Detection').first().json;\nconst visualizationResult = $('Module 4 - Visualization').first().json;\nconst chatbotResponse = $('Module 5 - Chatbot').first().json;\nconst chatbotText = chatbotResponse.choices?.[0]?.message?.content ?? chatbotResponse;\nlet chatbotData = chatbotText;\nif (typeof chatbotText === 'string') {\n  try {\n    chatbotData = JSON.parse(chatbotText);\n  } catch (error) {\n    chatbotData = { raw: chatbotText };\n  }\n}\nconst reportMarkdown = `# ${input.reportName}\n\n## 1. Summarization\n${JSON.stringify(summaryResult, null, 2)}\n\n## 2. Gap Detection\n${JSON.stringify(gapData, null, 2)}\n\n## 3. Trend Detection\n${JSON.stringify(trendResult, null, 2)}\n\n## 4. Visualization\n${JSON.stringify(visualizationResult, null, 2)}\n\n## 5. Chatbot\n${JSON.stringify(chatbotData, null, 2)}\n`;\nreturn [{\n  json: {\n    id: `rpt_${Date.now()}`,\n    createdAt: new Date().toISOString(),\n    reportName: input.reportName,\n    question: input.question,\n    papersCount: input.papers.length,\n    analysisReport: {\n      summarization: summaryResult,\n      gapDetection: gapData,\n      trendDetection: trendResult,\n      visualization: visualizationResult,\n      chatbot: chatbotData,\n    },\n    reportMarkdown,\n  },\n}];"
+      },
+      "id": "b7f0f49a-3e2e-4f53-9b5d-1f2c7e7a0008",
+      "name": "Compose Final Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2040, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "b7f0f49a-3e2e-4f53-9b5d-1f2c7e7a0009",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [2280, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Input": {
+      "main": [
+        [
+          {
+            "node": "Module 1 - Summarization",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Module 1 - Summarization": {
+      "main": [
+        [
+          {
+            "node": "Module 2 - Gap Detection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Module 2 - Gap Detection": {
+      "main": [
+        [
+          {
+            "node": "Module 3 - Trend Detection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Module 3 - Trend Detection": {
+      "main": [
+        [
+          {
+            "node": "Module 4 - Visualization",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Module 4 - Visualization": {
+      "main": [
+        [
+          {
+            "node": "Module 5 - Chatbot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Module 5 - Chatbot": {
+      "main": [
+        [
+          {
+            "node": "Compose Final Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compose Final Report": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "versionId": "1"
+}

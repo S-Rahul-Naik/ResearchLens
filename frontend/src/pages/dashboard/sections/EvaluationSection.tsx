@@ -188,11 +188,17 @@ export default function EvaluationSection({ backendResult, papers: propPapers = 
     const avgCoherence = topicsArr.length > 0 ? topicsArr.reduce((s, t) => s + t.coherence, 0) / topicsArr.length : 0;
     const assignedPaperIds = new Set(raw.module2.assignments.map(a => a.paperId));
     const avgGapScore = gapsArr.length > 0 ? gapsArr.reduce((s, g) => s + g.gapScore, 0) / gapsArr.length : 0;
+    const topicConfidence = topicsArr.length > 0 ? avgCoherence : 0;
+    const topicCoverage = papers.length > 0 ? assignedPaperIds.size / papers.length : 0;
+    const gapReliability = gapsArr.length > 0 ? gapsArr.reduce((s, g) => s + (g.reliability ?? g.confidence ?? 0.5), 0) / gapsArr.length : 0.5;
+    const trendReliability = raw.module4.trends.length > 0 ? raw.module4.trends.reduce((s, t) => s + (t.reliability ?? t.temporalConfidence ?? 0.5), 0) / raw.module4.trends.length : 0.5;
+    const honestyScore = raw.module10?.honestyScore ?? Math.max(0, Math.min(1, (topicConfidence * 0.3) + (topicCoverage * 0.2) + (gapReliability * 0.25) + (trendReliability * 0.25)));
     return {
       topicCoherence: avgCoherence,
       topicCoverage: papers.length > 0 ? assignedPaperIds.size / papers.length : 0,
       gapNovelty: avgGapScore,
       modelQuality: avgCoherence,
+      scientificHonesty: honestyScore,
       totalPapers: papers.length,
       totalTopics: topicsArr.length,
       totalGaps: gapsArr.length,
@@ -212,6 +218,7 @@ export default function EvaluationSection({ backendResult, papers: propPapers = 
     { label: 'Topic Coverage', value: ev.topicCoverage, color: '#f59e0b', desc: 'Fraction of papers assigned to a meaningful topic' },
     { label: 'Gap Novelty', value: ev.gapNovelty, color: '#8b5cf6', desc: 'Estimated novelty of detected gap pairs' },
     { label: 'Model Quality', value: ev.modelQuality, color: '#10b981', desc: 'Overall pipeline quality score (embedding + clustering)' },
+    { label: 'Scientific Honesty', value: ev.scientificHonesty, color: '#475569', desc: 'How well the analysis is supported by evidence and sufficiency checks' },
   ];
 
   const maxBarCount = Math.max(...ev.topicSizeDistribution.map((t) => t.count));
@@ -219,7 +226,7 @@ export default function EvaluationSection({ backendResult, papers: propPapers = 
   return (
     <div className="p-8 space-y-6">
       {/* Metric Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-5">
         {metrics.map((m) => (
           <div key={m.label} className="bg-white rounded-2xl border border-gray-100 p-5 flex flex-col items-center text-center">
             <CircularProgress value={m.value} color={m.color} size={96} />

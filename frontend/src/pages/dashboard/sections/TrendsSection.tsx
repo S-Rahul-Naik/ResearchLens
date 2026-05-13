@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import type { TopicTrend } from '../../../mocks/topics';
 import type { RunAllResult, BackendPaper } from '../../../lib/api';
 
 const TOPIC_COLORS = ['#0d9488','#f59e0b','#8b5cf6','#ec4899','#10b981','#06b6d4','#f97316','#3b82f6','#14b8a6','#a855f7'];
@@ -78,6 +79,7 @@ function TrendCard({ trend, allPapers, allGapTopicAIds, allGapTopicBIds, gapEvid
     rising: { bg: 'from-green-50 to-white', badge: 'bg-green-100 text-green-700', icon: 'ri-arrow-up-line', label: 'Rising' },
     stable: { bg: 'from-gray-50 to-white', badge: 'bg-gray-100 text-gray-600', icon: 'ri-arrow-right-line', label: 'Stable' },
     declining: { bg: 'from-rose-50 to-white', badge: 'bg-rose-100 text-rose-600', icon: 'ri-arrow-down-line', label: 'Declining' },
+    insufficient_data: { bg: 'from-slate-50 to-white', badge: 'bg-slate-100 text-slate-600', icon: 'ri-alert-line', label: 'Insufficient Data' },
   }[trend.trend];
 
   const latest = trend.dataPoints[trend.dataPoints.length - 1].count;
@@ -108,6 +110,17 @@ function TrendCard({ trend, allPapers, allGapTopicAIds, allGapTopicBIds, gapEvid
             <i className={trendStyle.icon} />{trendStyle.label}
           </span>
         </div>
+        {trend.trend === 'insufficient_data' && trend.trendMessage && (
+          <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-700 leading-relaxed">
+            {trend.trendMessage}
+            {(trend.temporalConfidence != null || trend.reliability != null) && (
+              <div className="mt-2 flex flex-wrap gap-2 text-[10px] font-semibold text-slate-500">
+                {trend.temporalConfidence != null && <span>Temporal confidence: {(trend.temporalConfidence * 100).toFixed(0)}%</span>}
+                {trend.reliability != null && <span>Reliability: {(trend.reliability * 100).toFixed(0)}%</span>}
+              </div>
+            )}
+          </div>
+        )}
         <MiniLineChart data={trend.dataPoints} color={trend.color} annotations={annotations} />
         {/* Annotation legend */}
         {annotations.length > 0 && (
@@ -156,14 +169,19 @@ export default function TrendsSection({ backendResult, papers: propPapers = [] }
   const allGapTopicBIds = useMemo(() => backendResult?.modules.module3.gaps.map(g => g.topicB) ?? [], [backendResult]);
   const gapEvidencePaperIds = useMemo(() => backendResult?.modules.module3.gaps.flatMap(g => g.evidencePaperIds) ?? [], [backendResult]);
 
-  const [filter, setFilter] = useState<'all' | 'rising' | 'stable' | 'declining'>('all');
+  const [filter, setFilter] = useState<'all' | 'rising' | 'stable' | 'declining' | 'insufficient_data'>('all');
   const filtered = filter === 'all' ? trends : trends.filter(t => t.trend === filter);
-  const counts = { rising: trends.filter(t => t.trend === 'rising').length, stable: trends.filter(t => t.trend === 'stable').length, declining: trends.filter(t => t.trend === 'declining').length };
+  const counts = {
+    rising: trends.filter(t => t.trend === 'rising').length,
+    stable: trends.filter(t => t.trend === 'stable').length,
+    declining: trends.filter(t => t.trend === 'declining').length,
+    insufficient_data: trends.filter(t => t.trend === 'insufficient_data').length,
+  };
 
   return (
     <div className="p-8">
       <div className="flex flex-wrap gap-2 mb-6">
-        {([['all', 'All Topics', trends.length], ['rising', 'Rising', counts.rising], ['stable', 'Stable', counts.stable], ['declining', 'Declining', counts.declining]] as const).map(([val, label, count]) => (
+        {([['all', 'All Topics', trends.length], ['rising', 'Rising', counts.rising], ['stable', 'Stable', counts.stable], ['declining', 'Declining', counts.declining], ['insufficient_data', 'Insufficient', counts.insufficient_data]] as const).map(([val, label, count]) => (
           <button key={val} onClick={() => setFilter(val)} className={`whitespace-nowrap flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer ${filter === val ? 'bg-[#0f766e] text-white' : 'bg-white border border-gray-200 text-gray-600 hover:border-gray-300'}`}>
             {label}
             <span className={`text-xs px-1.5 py-0.5 rounded-full ${filter === val ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-500'}`}>{count}</span>
@@ -178,6 +196,7 @@ export default function TrendsSection({ backendResult, papers: propPapers = [] }
           <p className="flex flex-wrap items-center gap-3 mt-1">
             <span className="flex items-center gap-1.5"><span className="inline-block w-5 h-0 border-t-2 border-dashed border-amber-500" /> Dashed amber line = first study year in dataset</span>
             <span className="flex items-center gap-1.5"><svg width="9" height="9" viewBox="0 0 10 10"><polygon points="5,0 9,5 5,10 1,5" fill="#8b5cf6" /></svg> Purple diamond = bridging paper published (gap event)</span>
+            <span className="flex items-center gap-1.5"><i className="ri-alert-line text-slate-500" /> Grey badge = insufficient temporal evidence</span>
           </p>
         </div>
       </div>

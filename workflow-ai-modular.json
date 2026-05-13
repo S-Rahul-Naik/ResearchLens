@@ -1,0 +1,522 @@
+{
+  "name": "ResearchLens 5-Section Analysis (Modular AI Nodes)",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "researchlens-5-section-analysis-modular"
+      },
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -380,
+        0
+      ],
+      "webhookId": "webhook-researchlens-5-section-modular",
+      "disabled": false
+    },
+    {
+      "parameters": {
+        "functionCode": "const inputItems = $input.all();\nconst webhookJson = inputItems[0]?.json ?? {};\nconst body = webhookJson.body ?? webhookJson;\nconst papers = Array.isArray(body.papers) ? body.papers : (body.papers ? [body.papers] : []);\nconst question = body.question || '';\nconst papersList = papers.length ? papers.map((p, i) => `${i+1}. Title: ${p.title || 'Untitled'}\\nAbstract: ${p.abstract || 'N/A'}`).join('\\n\\n') : '';\nconst chatInput = `${papersList}\\n\\nQuestion: ${question}`;\nreturn [{\n  json: {\n    papers,\n    question,\n    papersJson: JSON.stringify(papers),\n    papersList,\n    chatInput,\n  },\n}];"
+      },
+      "id": "prepare_input",
+      "name": "Prepare Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -180,
+        0
+      ],
+      "disabled": false
+    },
+    {
+      "parameters": {
+        "text": "{{ $json.papersList }}\n\nQuestion: {{ $json.question }}",
+        "options": {
+          "systemMessage": "You are a research paper summarization expert. Analyze the provided research papers and question. Provide a concise, structured summary of the key findings, methodologies, and contributions. Return ONLY valid JSON with this structure: {\"summary\": \"...\", \"keyFindings\": [\"...\"], \"methodology\": \"...\"}. Do not include any text outside the JSON."
+        }
+      },
+      "id": "summarization_agent",
+      "name": "Summarization Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        50,
+        -300
+      ],
+      "disabled": false
+    },
+    {
+      "parameters": {
+        "model": "gpt-3.5-turbo",
+        "temperature": 0.2,
+        "maxTokens": 500,
+        "options": {}
+      },
+      "id": "summarization_model",
+      "name": "OpenAI Chat Model (Summarization)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1,
+      "position": [
+        250,
+        -350
+      ],
+      "disabled": false,
+      "credentials": {
+        "openAiApi": "openai_api"
+      }
+    },
+    {
+      "parameters": {
+        "text": "{{ $json.papersList }}\n\nQuestion: {{ $json.question }}",
+        "options": {
+          "systemMessage": "You are a research gap analysis expert. Identify missing research areas, unexplored questions, and potential improvements needed in the given research papers. Return ONLY valid JSON with this structure: {\"gaps\": [\"...\"], \"recommendations\": [\"...\"], \"priority\": \"high|medium|low\"}. Do not include any text outside the JSON."
+        }
+      },
+      "id": "gap_agent",
+      "name": "Gap Detection Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        50,
+        -80
+      ],
+      "disabled": false
+    },
+    {
+      "parameters": {
+        "model": "gpt-3.5-turbo",
+        "temperature": 0.2,
+        "maxTokens": 500,
+        "options": {}
+      },
+      "id": "gap_model",
+      "name": "OpenAI Chat Model (Gap Detection)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1,
+      "position": [
+        250,
+        -130
+      ],
+      "disabled": false,
+      "credentials": {
+        "openAiApi": "openai_api"
+      }
+    },
+    {
+      "parameters": {
+        "text": "{{ $json.papersList }}\n\nQuestion: {{ $json.question }}",
+        "options": {
+          "systemMessage": "You are a research trends analyst. Analyze the provided papers and identify emerging trends, patterns, and future directions in the research area. Return ONLY valid JSON with this structure: {\"trends\": [\"...\"], \"emergingAreas\": [\"...\"], \"futureDirections\": [\"...\"]}. Do not include any text outside the JSON."
+        }
+      },
+      "id": "trend_agent",
+      "name": "Trend Detection Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        50,
+        120
+      ],
+      "disabled": false
+    },
+    {
+      "parameters": {
+        "model": "gpt-3.5-turbo",
+        "temperature": 0.2,
+        "maxTokens": 500,
+        "options": {}
+      },
+      "id": "trend_model",
+      "name": "OpenAI Chat Model (Trend Detection)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1,
+      "position": [
+        250,
+        70
+      ],
+      "disabled": false,
+      "credentials": {
+        "openAiApi": "openai_api"
+      }
+    },
+    {
+      "parameters": {
+        "text": "{{ $json.papersList }}\n\nQuestion: {{ $json.question }}",
+        "options": {
+          "systemMessage": "You are a research visualization expert. Suggest effective ways to visualize the research data from provided papers including charts, graphs, and diagrams. Return ONLY valid JSON with this structure: {\"visualizations\": [{\"type\": \"...\", \"title\": \"...\", \"description\": \"...\"}], \"dataPoints\": [\"...\"]}. Do not include any text outside the JSON."
+        }
+      },
+      "id": "visualization_agent",
+      "name": "Visualization Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        50,
+        320
+      ],
+      "disabled": false
+    },
+    {
+      "parameters": {
+        "model": "gpt-3.5-turbo",
+        "temperature": 0.2,
+        "maxTokens": 500,
+        "options": {}
+      },
+      "id": "visualization_model",
+      "name": "OpenAI Chat Model (Visualization)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1,
+      "position": [
+        250,
+        270
+      ],
+      "disabled": false,
+      "credentials": {
+        "openAiApi": "openai_api"
+      }
+    },
+    {
+      "parameters": {
+        "text": "{{ $json.papersList }}\n\nQuestion: {{ $json.question }}",
+        "options": {
+          "systemMessage": "You are a research chatbot assistant. Provide conversational responses to questions about the research papers, summarizing their findings and answering specific queries. Return ONLY valid JSON with this structure: {\"botResponse\": \"...\", \"suggestedFollowUps\": [\"...\"], \"confidence\": \"high|medium|low\"}. Do not include any text outside the JSON."
+        }
+      },
+      "id": "chatbot_agent",
+      "name": "Chatbot Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        50,
+        520
+      ],
+      "disabled": false
+    },
+    {
+      "parameters": {
+        "model": "gpt-3.5-turbo",
+        "temperature": 0.2,
+        "maxTokens": 500,
+        "options": {}
+      },
+      "id": "chatbot_model",
+      "name": "OpenAI Chat Model (Chatbot)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1,
+      "position": [
+        250,
+        470
+      ],
+      "disabled": false,
+      "credentials": {
+        "openAiApi": "openai_api"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "// Parse AI Agent outputs from each input index\nconst parseOutput = (output, fallback = {}) => {\n  if (!output) return fallback;\n  if (typeof output === 'string') {\n    try {\n      const jsonMatch = output.match(/\\{[^{}]*(?:\\{[^{}]*\\}[^{}]*)*\\}/);\n      if (jsonMatch) return JSON.parse(jsonMatch[0]);\n      return fallback;\n    } catch (e) {\n      return fallback;\n    }\n  }\n  return output;\n};\n\nconst inputs = $input.all();\nconst summarization = parseOutput(\n  inputs[0]?.json?.output || inputs[0]?.json?.text || inputs[0]?.json?.response,\n  { summary: '', keyFindings: [], methodology: '' }\n);\nconst gapDetection = parseOutput(\n  inputs[1]?.json?.output || inputs[1]?.json?.text || inputs[1]?.json?.response,\n  { gaps: [], recommendations: [], priority: 'medium' }\n);\nconst trendDetection = parseOutput(\n  inputs[2]?.json?.output || inputs[2]?.json?.text || inputs[2]?.json?.response,\n  { trends: [], emergingAreas: [], futureDirections: [] }\n);\nconst visualization = parseOutput(\n  inputs[3]?.json?.output || inputs[3]?.json?.text || inputs[3]?.json?.response,\n  { visualizations: [], dataPoints: [] }\n);\nconst chatbot = parseOutput(\n  inputs[4]?.json?.output || inputs[4]?.json?.text || inputs[4]?.json?.response,\n  { botResponse: '', suggestedFollowUps: [], confidence: 'medium' }\n);\n\nreturn {\n  summarization,\n  gapDetection,\n  trendDetection,\n  visualization,\n  chatbot,\n  timestamp: new Date().toISOString(),\n  status: 'completed',\n  processingMode: 'modular-ai-agents'\n};"
+      },
+      "id": "merge_results",
+      "name": "Merge Results (All Sections)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        200
+      ],
+      "disabled": false
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{{ JSON.stringify($json) }}"
+      },
+      "id": "respond_to_webhook",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        600,
+        200
+      ],
+      "disabled": false
+    },
+    {
+      "parameters": {
+        "amount": 1,
+        "unit": "seconds"
+      },
+      "id": "delay_1",
+      "name": "Delay (Before Agent 2)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        150,
+        -80
+      ],
+      "disabled": false
+    },
+    {
+      "parameters": {
+        "amount": 2,
+        "unit": "seconds"
+      },
+      "id": "delay_2",
+      "name": "Delay (Before Agent 3)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        150,
+        120
+      ],
+      "disabled": false
+    },
+    {
+      "parameters": {
+        "amount": 3,
+        "unit": "seconds"
+      },
+      "id": "delay_3",
+      "name": "Delay (Before Agent 4)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        150,
+        320
+      ],
+      "disabled": false
+    },
+    {
+      "parameters": {
+        "amount": 4,
+        "unit": "seconds"
+      },
+      "id": "delay_4",
+      "name": "Delay (Before Agent 5)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        150,
+        520
+      ],
+      "disabled": false
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Input": {
+      "main": [
+        [
+          {
+            "node": "Summarization Agent",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Delay (Before Agent 2)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Delay (Before Agent 3)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Delay (Before Agent 4)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Delay (Before Agent 5)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delay (Before Agent 2)": {
+      "main": [
+        [
+          {
+            "node": "Gap Detection Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delay (Before Agent 3)": {
+      "main": [
+        [
+          {
+            "node": "Trend Detection Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delay (Before Agent 4)": {
+      "main": [
+        [
+          {
+            "node": "Visualization Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delay (Before Agent 5)": {
+      "main": [
+        [
+          {
+            "node": "Chatbot Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarization Agent": {
+      "main": [
+        [
+          {
+            "node": "Merge Results (All Sections)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gap Detection Agent": {
+      "main": [
+        [
+          {
+            "node": "Merge Results (All Sections)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trend Detection Agent": {
+      "main": [
+        [
+          {
+            "node": "Merge Results (All Sections)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Visualization Agent": {
+      "main": [
+        [
+          {
+            "node": "Merge Results (All Sections)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chatbot Agent": {
+      "main": [
+        [
+          {
+            "node": "Merge Results (All Sections)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model (Summarization)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Summarization Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model (Gap Detection)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Gap Detection Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model (Trend Detection)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Trend Detection Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model (Visualization)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Visualization Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model (Chatbot)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Chatbot Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Results (All Sections)": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1a2b3c4d-5e6f-7g8h-9i0j-1k2l3m4n5o"
+}

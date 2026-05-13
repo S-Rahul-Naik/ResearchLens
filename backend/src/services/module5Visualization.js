@@ -64,7 +64,9 @@ function runModule5Visualization(papers, topics, gaps) {
     sourceTopicId: gap.topicA,
     targetTopicId: gap.topicB,
     gapScore: gap.gapScore,
-    severity: gap.severity
+    severity: gap.severity,
+    reliability: gap.reliability,
+    coOccurrence: gap.coOccurrence,
   }));
 
   return {

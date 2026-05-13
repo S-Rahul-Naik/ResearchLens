@@ -40,6 +40,12 @@ function TopicDetailModal({ topic, onClose, searchQuery, allPapers }: { topic: T
                 {topic.trend === 'rising' ? '↑ Rising' : topic.trend === 'declining' ? '↓ Declining' : '→ Stable'}
               </span>
             </div>
+            {topic.llm_label && (
+              <p className="text-xs text-teal-700 font-semibold mb-2">{topic.llm_label}</p>
+            )}
+            {topic.llm_domain_summary && (
+              <p className="text-xs text-gray-600 mb-2 line-clamp-2">{topic.llm_domain_summary}</p>
+            )}
             <p className="text-xs text-gray-400">{papers.length} papers · Coherence: {topic.coherenceScore.toFixed(2)}</p>
           </div>
           <button onClick={onClose} className="whitespace-nowrap w-9 h-9 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 transition-colors cursor-pointer">
@@ -47,6 +53,25 @@ function TopicDetailModal({ topic, onClose, searchQuery, allPapers }: { topic: T
           </button>
         </div>
         <div className="flex-1 overflow-y-auto">
+          {(topic.llm_paradigm || topic.llm_methodological_theme) && (
+            <div className="px-6 py-4 border-b border-gray-50">
+              <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Research Methodology</h4>
+              <div className="space-y-2">
+                {topic.llm_paradigm && (
+                  <div>
+                    <span className="text-xs font-medium text-gray-600">Paradigm:</span>
+                    <p className="text-sm text-gray-800 mt-0.5">{topic.llm_paradigm}</p>
+                  </div>
+                )}
+                {topic.llm_methodological_theme && (
+                  <div>
+                    <span className="text-xs font-medium text-gray-600">Methodology:</span>
+                    <p className="text-sm text-gray-800 mt-0.5">{topic.llm_methodological_theme}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
           <div className="px-6 py-4 border-b border-gray-50">
             <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Keywords</h4>
             <div className="flex flex-wrap gap-2">
@@ -307,7 +332,22 @@ export default function TopicsSection({ backendResult, papers: propPapers = [] }
   const topics: Topic[] = useMemo(() => {
     const raw = backendResult?.modules.module2.topics;
     if (raw && raw.length > 0) {
-      return raw.map((t, i) => ({ id: t.topicId, name: t.name, keywords: t.keywords, paperIds: t.paperIds, coherenceScore: t.coherence, trend: 'stable' as const, color: TOPIC_COLORS[i % TOPIC_COLORS.length] }));
+      return raw.map((t, i) => ({
+        id: t.topicId,
+        name: t.name,
+        keywords: t.keywords,
+        paperIds: t.paperIds,
+        coherenceScore: t.coherence,
+        trend: 'stable' as const,
+        color: TOPIC_COLORS[i % TOPIC_COLORS.length],
+        // Include LLM fields if available
+        llm_label: t.llm_label,
+        llm_domain_summary: t.llm_domain_summary,
+        llm_methodological_theme: t.llm_methodological_theme,
+        llm_paradigm: t.llm_paradigm,
+        llm_confidence: t.llm_confidence,
+        heuristic_label: t.heuristic_label,
+      }));
     }
     return [];
   }, [backendResult]);
@@ -513,9 +553,15 @@ export default function TopicsSection({ backendResult, papers: propPapers = [] }
 
               {/* Body */}
               <div className="p-4">
-                <h3 className="text-sm font-bold text-gray-900 mb-2">
+                <h3 className="text-sm font-bold text-gray-900 mb-1">
                   {compareMode ? topic.name : <Highlight text={topic.name} query={searchQuery} />}
                 </h3>
+                {/* LLM Label if available */}
+                {topic.llm_label && (
+                  <p className="text-xs text-teal-700 font-semibold mb-2 line-clamp-2">
+                    {topic.llm_label}
+                  </p>
+                )}
                 <div className="flex flex-wrap gap-1 mb-3">
                   {topic.keywords.map((kw) => (
                     <span

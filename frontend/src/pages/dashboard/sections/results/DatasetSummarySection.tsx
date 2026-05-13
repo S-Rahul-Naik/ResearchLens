@@ -3,6 +3,7 @@ import type { AnalysisRun } from '../../../../hooks/useAnalysisHistory';
 
 export default function DatasetSummarySection({ run }: { run?: AnalysisRun | null }) {
   const br = run?.backendResult;
+  const trends = br?.modules.module4.trends ?? [];
   const papersCount = br?.papersCount ?? run?.papers ?? 0;
   const topics = br?.modules.module2.topics ?? [];
   const topicsCount = topics.length || (run?.topics ?? 0);
@@ -10,7 +11,7 @@ export default function DatasetSummarySection({ run }: { run?: AnalysisRun | nul
   const gapsCount = gaps.length || (run?.gaps ?? 0);
 
   const allYears = br
-    ? br.modules.module4.trends.flatMap(t => t.yearlyCounts.map(yc => yc.year))
+    ? trends.flatMap(t => t.yearlyCounts.map(yc => yc.year))
     : run
       ? [run.yearRange.start, run.yearRange.end]
       : [];
@@ -19,7 +20,7 @@ export default function DatasetSummarySection({ run }: { run?: AnalysisRun | nul
     : { start: new Date().getFullYear(), end: new Date().getFullYear() };
 
   const risingTopics = br
-    ? br.modules.module4.trends.filter(t => t.trend === 'rising').length
+    ? trends.filter(t => t.trend === 'rising').length
     : 0;
 
   const zeroCoocc = br ? gaps.filter(g => g.coOccurrence === 0).length : 0;

@@ -23,8 +23,19 @@ function adaptGaps(rawGaps: RunAllResult['modules']['module3']['gaps']): Researc
     paperIdsInA: [],
     paperIdsInB: [],
     paperIdsBridging: g.evidencePaperIds,
-    explanation: g.recommendation,
+    explanation: g.explanation || g.recommendation,
     rank: i + 1,
+    scoreComponents: (g as any).scoreComponents,
+    evidenceSnippets: (g as any).evidenceSnippets,
+    confidence: (g as any).confidence,
+    reliability: (g as any).reliability,
+    // Include LLM fields if available
+    llm_is_gap: (g as any).llm_is_gap,
+    llm_gap_explanation: (g as any).llm_gap_explanation,
+    llm_gap_significance: (g as any).llm_gap_significance,
+    llm_integration_opportunity: (g as any).llm_integration_opportunity,
+    llm_gap_confidence: (g as any).llm_gap_confidence,
+    llm_verified_bridging_papers: (g as any).llm_verified_bridging_papers,
   }));
 }
 
@@ -103,7 +114,7 @@ export default function GapsSection({ backendResult, papers: propPapers = [] }: 
         <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-teal-100 text-teal-700 flex-shrink-0"><i className="ri-information-line text-sm" /></div>
         <div>
           <p className="text-sm font-semibold text-teal-800 mb-0.5">How gaps are detected</p>
-          <p className="text-xs text-teal-700 leading-relaxed">A research gap is defined as two topics with <strong>high semantic similarity</strong> but <strong>low co-occurrence</strong> in papers. Formula: <code className="bg-teal-100 px-1.5 py-0.5 rounded font-mono text-[11px]">gap_score = similarity × (1 / (co_occurrence + 1))</code>. Click any card for full evidence. Switch to the <strong>Research Direction</strong> tab for a structured proposal.</p>
+          <p className="text-xs text-teal-700 leading-relaxed">Research gaps are now scored with a multi-factor engine: semantic similarity, temporal distance, methodology contrast, task overlap, architecture distance, cross-domain rarity, and co-occurrence scarcity. Citation signals are only used when the corpus actually contains them. Click any card for full evidence and factor details.</p>
         </div>
       </div>
 
@@ -207,7 +218,7 @@ export default function GapsSection({ backendResult, papers: propPapers = [] }: 
       {!selectMode && selectedIndex !== null && sorted[selectedIndex] && (
         <>
           <div className="fixed inset-0 bg-black/30 z-40" onClick={() => setSelectedIndex(null)} />
-          <GapDetailPanel gap={sorted[selectedIndex]} currentIndex={selectedIndex} totalCount={sorted.length} onNavigate={navigate} onClose={() => setSelectedIndex(null)} />
+          <GapDetailPanel gap={sorted[selectedIndex]} papers={paperList} currentIndex={selectedIndex} totalCount={sorted.length} onNavigate={navigate} onClose={() => setSelectedIndex(null)} />
         </>
       )}
     </div>

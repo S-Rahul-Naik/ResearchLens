@@ -14,6 +14,31 @@ export interface ResearchGap {
   paperIdsBridging: string[];
   explanation: string;
   rank: number;
+  scoreComponents?: {
+    semanticSimilarity: number;
+    temporalDistance?: number | null;
+    citationDivergence?: number | null;
+    methodologyContrast?: number | null;
+    taskOverlap?: number | null;
+    architectureDistance?: number | null;
+    crossDomainRarity: number;
+    coOccurrenceScarcity: number;
+  };
+  evidenceSnippets?: { paperId: string; title: string; snippet: string; role?: string; relevance?: number }[];
+  confidence?: number;
+  reliability?: number;
+  // LLM-enhanced fields
+  llm_is_gap?: boolean;
+  llm_gap_explanation?: string;
+  llm_gap_significance?: string;
+  llm_integration_opportunity?: string;
+  llm_gap_confidence?: number;
+  llm_verified_bridging_papers?: Array<{
+    title: string;
+    llm_is_bridging?: boolean;
+    llm_bridging_evidence?: string;
+    llm_bridging_confidence?: number;
+  }>;
 }
 
 // Gap score formula: gap_score = similarity * (1 / (co_occurrence + 1))

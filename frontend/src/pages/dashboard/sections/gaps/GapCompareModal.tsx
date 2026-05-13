@@ -23,8 +23,8 @@ function MetricBar({ value, max = 1, color }: { value: number; max?: number; col
 }
 
 function GapPane({ gap, side }: { gap: ResearchGap; side: 'A' | 'B' }) {
-  const topicAName = gap.topicAName || gap.topicALabel || gap.topicA || 'Topic A';
-  const topicBName = gap.topicBName || gap.topicBLabel || gap.topicB || 'Topic B';
+  const topicAName = gap.topicAName || gap.topicAId || 'Topic A';
+  const topicBName = gap.topicBName || gap.topicBId || 'Topic B';
   const papersInA = gap.paperIdsInA ?? [];
   const papersInB = gap.paperIdsInB ?? [];
   const bridging = gap.paperIdsBridging ?? [];
@@ -69,8 +69,8 @@ function GapPane({ gap, side }: { gap: ResearchGap; side: 'A' | 'B' }) {
       {/* Topics */}
       <div className="space-y-2">
         {[
-          { t: topicA, name: gap.topicAName, kws: gap.topicAKeywords },
-          { t: topicB, name: gap.topicBName, kws: gap.topicBKeywords },
+          { id: gap.topicAId, name: topicAName, kws: gap.topicAKeywords },
+          { id: gap.topicBId, name: topicBName, kws: gap.topicBKeywords },
         ].map((item, i) => (
           <div key={i} className="rounded-xl border border-gray-100 p-3">
             <div className="flex items-center gap-2 mb-2">

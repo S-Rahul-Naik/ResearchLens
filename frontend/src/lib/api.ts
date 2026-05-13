@@ -62,6 +62,13 @@ export interface TopicResult {
   keywords: string[];
   paperIds: string[];
   coherence: number;
+  // LLM-enhanced fields
+  llm_label?: string;
+  llm_domain_summary?: string;
+  llm_methodological_theme?: string;
+  llm_paradigm?: string;
+  llm_confidence?: number;
+  heuristic_label?: string;
 }
 
 export interface GapResult {
@@ -71,11 +78,65 @@ export interface GapResult {
   topicALabel: string;
   topicBLabel: string;
   similarity: number;
+  temporalDistance?: number | null;
+  citationDivergence?: number | null;
+  citationAvailable?: boolean;
+  bibliographicDivergence?: number;
+  methodologyContrast?: number | null;
+  taskOverlap?: number | null;
+  architectureDistance?: number | null;
+  crossDomainRarity?: number;
   coOccurrence: number;
+  coOccurrenceScarcity?: number;
   gapScore: number;
   severity: 'low' | 'moderate' | 'critical';
   evidencePaperIds: string[];
+  evidenceSnippets?: { paperId: string; title: string; snippet: string; role?: string; relevance?: number }[];
   recommendation: string;
+  explanation?: string;
+  confidence?: number;
+  reliability?: number;
+  scoreComponents?: {
+    semanticSimilarity: number;
+    temporalDistance?: number | null;
+    citationDivergence?: number | null;
+    methodologyContrast?: number | null;
+    taskOverlap?: number | null;
+    architectureDistance?: number | null;
+    crossDomainRarity: number;
+    coOccurrenceScarcity: number;
+  };
+  // LLM-enhanced fields
+  llm_is_gap?: boolean;
+  llm_gap_explanation?: string;
+  llm_gap_significance?: string;
+  llm_integration_opportunity?: string;
+  llm_gap_confidence?: number;
+  llm_verified_bridging_papers?: Array<{
+    title: string;
+    llm_is_bridging?: boolean;
+    llm_bridging_evidence?: string;
+    llm_bridging_confidence?: number;
+  }>;
+}
+
+export interface MapLinkResult {
+  sourceTopicId: string;
+  targetTopicId: string;
+  gapScore: number;
+  severity: 'low' | 'moderate' | 'critical';
+  reliability?: number;
+  coOccurrence?: number;
+  explanation?: string;
+}
+
+export interface MapResult {
+  module: string;
+  map: {
+    points: PointResult[];
+    topicCenters: { topicId: string; name: string; x: number; y: number }[];
+    links: MapLinkResult[];
+  };
 }
 
 export interface TrendResult {
@@ -83,7 +144,51 @@ export interface TrendResult {
   topicName: string;
   yearlyCounts: { year: number; count: number }[];
   slope: number;
-  trend: 'rising' | 'stable' | 'declining';
+  trend: 'rising' | 'stable' | 'declining' | 'insufficient_data';
+  movingAverage?: { year: number; count: number }[];
+  normalizedCounts?: { year: number; value: number }[];
+  yearOverYearChanges?: { year: number; change: number }[];
+  insufficientData?: boolean;
+  trendMessage?: string;
+  paperCount?: number;
+  uniqueYears?: number;
+  dataDensity?: number;
+  temporalConfidence?: number;
+  reliability?: number;
+  confidenceInterval?: [number, number];
+  temporalEmbedding?: number[];
+  yearlyCoverage?: number;
+  llm_trend_summary?: string;
+  llm_paradigm_shifts?: string[];
+  llm_reliability_explanation?: string;
+  llm_confidence?: number;
+}
+
+export interface ScientificHonestyResult {
+  module: string;
+  honestyScore: number;
+  reliability: number;
+  scoreBreakdown: {
+    topicConfidence: number;
+    topicLabelConfidence: number;
+    gapReliability: number;
+    trendReliability: number;
+    coverage: number;
+    gapEvidenceCoverage: number;
+    citationAvailability: number;
+    trendSufficiency: number;
+    mapSupport: number;
+  };
+  caveats: string[];
+  warningCount: number;
+  inspected: {
+    paperCount: number;
+    topicCount: number;
+    gapCount: number;
+    trendCount: number;
+    insufficientTrendCount: number;
+  };
+  summary: string;
 }
 
 export interface PointResult {
@@ -98,7 +203,8 @@ export interface PointResult {
 export interface ChatbotResult {
   module: string;
   answer: string;
-  citations: { paperId: string; title: string; chunkId: string; relevance: number }[];
+  citations: { paperId: string; title: string; chunkId: string; snippet?: string; relevance: number }[];
+  gapEvidences?: { gapId: string | null; evidences: { paperId: string; title: string; snippet: string }[] }[];
 }
 
 export interface ContradictionResult {
@@ -125,21 +231,35 @@ export interface RelatedWorkSection {
   paragraph: string;
 }
 
+export interface AnalysisReportResult {
+  report_title?: string;
+  executive_summary?: string;
+  key_findings?: string[];
+  top_topics?: string[];
+  top_gaps?: string[];
+  trend_insights?: string[];
+  scientific_honesty?: string;
+  report_markdown?: string;
+  confidence?: number;
+}
+
 export interface RunAllResult {
   id: string;
   createdAt: string;
   papersCount: number;
   modulesInOrder: { moduleId: number; name: string; result: unknown }[];
+  analysisReport?: AnalysisReportResult;
   modules: {
     module1: { module: string; count: number; summaries: { paperId: string; title: string; summary: string; keywords: string[] }[] };
     module2: { module: string; topics: TopicResult[]; assignments: { paperId: string; topicId: string }[] };
     module3: { module: string; formula: string; gaps: GapResult[] };
     module4: { module: string; trends: TrendResult[] };
-    module5: { module: string; map: { points: PointResult[]; topicCenters: { topicId: string; name: string; x: number; y: number }[]; links: unknown[] } };
+    module5: MapResult;
     module6: ChatbotResult;
     module7: { module: string; contradictions: ContradictionResult[] };
     module8: MatrixResult;
     module9: { module: string; sections: RelatedWorkSection[]; draftMarkdown: string };
+    module10: ScientificHonestyResult;
   };
 }
 
@@ -307,6 +427,14 @@ export async function apiDeletePapers(paperIds: string[]): Promise<{ success: bo
 
 export async function runAllModules(payload: RunAllPayload): Promise<RunAllResult> {
   return post<RunAllResult>('/api/modules/run-all', payload, true);
+}
+
+export async function quickAnalysisModules(payload: RunAllPayload): Promise<{ id: string; createdAt: string; papersCount: number; analysisReport: AnalysisReportResult; reportId: string; processingTimeMs: number }> {
+  return post<{ id: string; createdAt: string; papersCount: number; analysisReport: AnalysisReportResult; reportId: string; processingTimeMs: number }>('/api/modules/quick-analysis', payload, true);
+}
+
+export async function n8nAnalysisModules(payload: RunAllPayload): Promise<{ id: string; createdAt: string; papersCount: number; analysisReport: AnalysisReportResult; reportId: string; processingTimeMs: number }> {
+  return post<{ id: string; createdAt: string; papersCount: number; analysisReport: AnalysisReportResult; reportId: string; processingTimeMs: number }>('/api/modules/n8n-analysis', payload, true);
 }
 
 export async function apiGetAnalysisReports(): Promise<{ count: number; reports: RunAllResult[] }> {

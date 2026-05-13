@@ -60,7 +60,7 @@ async function callOllama(prompt) {
   }
 }
 
-function buildOllamaPrompt(question, rankedChunks, topics, gaps, trends, papers) {
+function buildOllamaPrompt(question, rankedChunks, topics, gaps, trends, papers, allChunks = []) {
   // Build comprehensive context for Ollama - optimized for length
   let contextParts = [];
 
@@ -87,8 +87,21 @@ function buildOllamaPrompt(question, rankedChunks, topics, gaps, trends, papers)
   if (gaps && gaps.length > 0) {
     contextParts.push('\nResearch Gaps:');
     gaps.slice(0, 3).forEach((gap, idx) => {
-      const desc = gap.gapStatement || gap.description || 'Gap between topics';
+      const desc = gap.gapStatement || gap.description || gap.explanation || 'Gap between topics';
+      // collect evidence snippets for this gap from allChunks
+      const evidenceIds = gap.evidencePaperIds || gap.paperIdsBridging || (gap.paperIdsInA || []).concat(gap.paperIdsInB || []);
+      const evidences = [];
+      if (evidenceIds && evidenceIds.length > 0 && allChunks.length > 0) {
+        for (const pid of evidenceIds.slice(0, 3)) {
+          const match = allChunks.find(c => c.paperId === pid);
+          if (match) evidences.push({ paperId: pid, title: match.title, snippet: match.text.substring(0, 180).replace(/\s+/g, ' ').trim() });
+        }
+      }
       contextParts.push(`${idx + 1}. ${desc}`);
+      if (evidences.length > 0) {
+        contextParts.push('  Evidence:');
+        evidences.forEach(ev => contextParts.push(`   - ${ev.paperId}: "${ev.title}" — "${ev.snippet}..."`));
+      }
     });
   }
 
@@ -153,7 +166,7 @@ async function runModule6Chatbot(papers, question, topics = [], gaps = [], trend
       .slice(0, 6);
 
     // Build comprehensive prompt and call Ollama
-    const prompt = buildOllamaPrompt(question, ranked, topics, gaps, trends, papers);
+    const prompt = buildOllamaPrompt(question, ranked, topics, gaps, trends, papers, chunks);
     console.log('Calling Ollama with prompt length:', prompt.length);
     
     let answer = '';
@@ -176,13 +189,32 @@ async function runModule6Chatbot(papers, question, topics = [], gaps = [], trend
         paperId: item.paperId,
         title: item.title,
         chunkId: item.chunkId,
+        snippet: item.text ? item.text.substring(0, 300).replace(/\s+/g, ' ').trim() : undefined,
         relevance: toFixedNumber(item.score)
       }));
+
+    // Map gap -> evidence snippets (from chunks) to return structured evidence
+    const gapEvidences = (gaps || []).map(gap => {
+      const evidenceIds = gap.evidencePaperIds || gap.paperIdsBridging || (gap.paperIdsInA || []).concat(gap.paperIdsInB || []);
+      const items = [];
+      if (evidenceIds && evidenceIds.length > 0) {
+        for (const pid of evidenceIds) {
+          const matched = chunks.find(c => c.paperId === pid) || ranked.find(c => c.paperId === pid);
+          if (matched) {
+            items.push({ paperId: pid, title: matched.title, snippet: (matched.text || '').substring(0, 300).replace(/\s+/g, ' ').trim() });
+          } else {
+            items.push({ paperId: pid, title: '(unknown)', snippet: '' });
+          }
+        }
+      }
+      return { gapId: gap.id || gap.gapId || null, evidences: items };
+    });
 
     return {
       module: 'M6 RAG Chatbot',
       answer: answer || 'Unable to generate an answer for this question.',
-      citations
+      citations,
+      gapEvidences
     };
   } catch (error) {
     console.error('Module 6 Error:', error);

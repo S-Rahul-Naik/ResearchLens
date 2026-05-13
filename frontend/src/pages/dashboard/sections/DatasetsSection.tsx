@@ -32,6 +32,11 @@ function buildReportData(
   gaps: GapResult[],
   getTopicName: (topicId: string) => string,
 ) {
+  const safeNumber = (value: unknown, fallback = 0): number => {
+    const num = typeof value === 'number' ? value : Number(value);
+    return Number.isFinite(num) ? num : fallback;
+  };
+
   return {
     generatedAt: new Date().toISOString(),
     metadata: {
@@ -43,9 +48,9 @@ function buildReportData(
     },
     gaps: gaps.map((g, idx) => ({
       rank: idx + 1,
-      topicA: g.topicALabel || getTopicName(g.topicA),
-      topicB: g.topicBLabel || getTopicName(g.topicB),
-      similarityScore: g.similarity,
+      topicA: g.topicALabel || getTopicName(g.topicA || ''),
+      topicB: g.topicBLabel || getTopicName(g.topicB || ''),
+      similarityScore: safeNumber(g.similarity),
       coOccurrenceCount: g.coOccurrence ?? (g as any).coOccurrenceCount ?? 0,
       gapScore: g.gapScore ?? (g as any).gapScore ?? 0,
       topicAKeywords: (g as any).topicAKeywords ?? [],
@@ -70,15 +75,20 @@ function buildReportData(
 }
 
 function generatePrintHTML(papers: Paper[], processedCount: number, avgGapScore: string, topics: TopicResult[], gaps: GapResult[], getTopicName: (topicId: string) => string): string {
+  const safeNumber = (value: unknown, fallback = 0): number => {
+    const num = typeof value === 'number' ? value : Number(value);
+    return Number.isFinite(num) ? num : fallback;
+  };
+
   const rows = gaps
     .map((g, idx) =>
       `<tr>
           <td>${idx + 1}</td>
-          <td>${g.topicALabel || getTopicName(g.topicA)}</td>
-          <td>${g.topicBLabel || getTopicName(g.topicB)}</td>
-          <td>${(g.similarity || 0).toFixed(2)}</td>
+          <td>${g.topicALabel || getTopicName(g.topicA || '')}</td>
+          <td>${g.topicBLabel || getTopicName(g.topicB || '')}</td>
+          <td>${safeNumber(g.similarity).toFixed(2)}</td>
           <td>${g.coOccurrence ?? (g as any).coOccurrenceCount ?? 0}</td>
-          <td><strong>${(g.gapScore || 0).toFixed(3)}</strong></td>
+          <td><strong>${safeNumber(g.gapScore).toFixed(3)}</strong></td>
         </tr>`
     )
     .join('');
@@ -193,6 +203,7 @@ export default function DatasetsSection({ onShowResults }: DatasetsSectionProps)
   const [selectedPaper, setSelectedPaper] = useState<Paper | null>(null);
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
   const [showPipeline, setShowPipeline] = useState(false);
+  const [selectedAnalysisType, setSelectedAnalysisType] = useState<'quick' | 'full'>('n8n');
   const [latestRunData, setLatestRunData] = useState<(Omit<AnalysisRun, 'id' | 'timestamp'>) | null>(null);
   const [runName, setRunName] = useState('');
   const [processedTopics, setProcessedTopics] = useState<TopicResult[]>([]);
@@ -394,6 +405,13 @@ export default function DatasetsSection({ onShowResults }: DatasetsSectionProps)
     setUploadMessage(null);
     const ok = await syncCorpusToBackend(papers);
     if (!ok) return;
+    // Skip dialog - directly use N8N analysis
+    setSelectedAnalysisType('n8n' as any);
+    setShowPipeline(true);
+  };
+
+  const handleAnalysisTypeChoice = (type: 'quick' | 'full') => {
+    setSelectedAnalysisType(type);
     setShowPipeline(true);
   };
 
@@ -510,7 +528,7 @@ export default function DatasetsSection({ onShowResults }: DatasetsSectionProps)
 
   const processedCount = papers.filter((p) => p.status === 'processed').length;
   const avgGapScore = processedGaps.length
-    ? (processedGaps.reduce((sum, g) => sum + g.gapScore, 0) / processedGaps.length).toFixed(2)
+    ? (processedGaps.reduce((sum, g) => sum + (Number.isFinite(g.gapScore) ? g.gapScore : 0), 0) / processedGaps.length).toFixed(2)
     : '0.00';
 
   const getTopicName = (topicId: string) => processedTopics.find((t) => t.topicId === topicId)?.name ?? processedTopics.find((t: any) => t.topicId === topicId)?.name ?? topicId;
@@ -767,16 +785,16 @@ export default function DatasetsSection({ onShowResults }: DatasetsSectionProps)
                   </span>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-800 truncate">{gap.topicALabel} × {gap.topicBLabel}</p>
-                    <p className="text-xs text-gray-400">Similarity: {gap.similarity.toFixed(2)} · Co-occ: {gap.coOccurrence}</p>
+                    <p className="text-xs text-gray-400">Similarity: {(Number.isFinite(gap.similarity) ? gap.similarity : 0).toFixed(2)} · Co-occ: {gap.coOccurrence ?? 0}</p>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
                     <div className="w-20 h-1.5 rounded-full bg-gray-100 overflow-hidden">
                       <div
                         className="h-full rounded-full bg-teal-500 transition-all duration-700"
-                        style={{ width: `${Math.min(gap.gapScore, 1) * 100}%` }}
+                        style={{ width: `${Math.min(Number.isFinite(gap.gapScore) ? gap.gapScore : 0, 1) * 100}%` }}
                       />
                     </div>
-                    <span className="text-xs font-semibold text-teal-700">{gap.gapScore.toFixed(2)}</span>
+                    <span className="text-xs font-semibold text-teal-700">{(Number.isFinite(gap.gapScore) ? gap.gapScore : 0).toFixed(2)}</span>
                   </div>
                 </div>
               ))}
@@ -1021,6 +1039,7 @@ export default function DatasetsSection({ onShowResults }: DatasetsSectionProps)
         <ProcessingPipeline
           papers={papers}
           runName={runName.trim() || undefined}
+          analysisType={selectedAnalysisType}
           onComplete={handlePipelineComplete}
           onCancel={handlePipelineCancel}
         />

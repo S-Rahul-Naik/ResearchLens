@@ -8,7 +8,7 @@ const TOPIC_COLORS = ['#0d9488', '#f59e0b', '#8b5cf6', '#e11d48', '#3b82f6', '#e
 interface DisplayTopic {
   id: string; name: string; keywords: string[];
   paperIds: string[]; coherenceScore: number;
-  trend: 'rising' | 'stable' | 'declining'; color: string;
+  trend: 'rising' | 'stable' | 'declining' | 'insufficient_data'; color: string;
   papers: { id: string; title: string; authors: string[]; year: number }[];
 }
 
@@ -16,6 +16,7 @@ const TREND_CONFIG = {
   rising: { label: 'Rising', icon: 'ri-arrow-right-up-line', color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-100' },
   stable: { label: 'Stable', icon: 'ri-arrow-right-line', color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-100' },
   declining: { label: 'Declining', icon: 'ri-arrow-right-down-line', color: 'text-rose-600', bg: 'bg-rose-50', border: 'border-rose-100' },
+  insufficient_data: { label: 'Insufficient', icon: 'ri-alert-line', color: 'text-slate-600', bg: 'bg-slate-100', border: 'border-slate-200' },
 };
 
 type TopicSortKey = 'papers' | 'coherence' | 'name';
@@ -38,12 +39,13 @@ export default function TopicModelingSection({ backendResult }: { backendResult?
   const [sortKey, setSortKey] = useState<TopicSortKey>('papers');
   const [sortDir, setSortDir] = useState<'desc' | 'asc'>('desc');
   const [paperFilter, setPaperFilter] = useState<PaperCountFilter>('all');
-  const [trendFilter, setTrendFilter] = useState<'all' | 'rising' | 'stable' | 'declining'>('all');
+  const [trendFilter, setTrendFilter] = useState<'all' | 'rising' | 'stable' | 'declining' | 'insufficient_data'>('all');
+  const trends = backendResult?.modules.module4.trends ?? [];
 
   // Build DisplayTopic array from backend result
   const allTopics: DisplayTopic[] = backendResult
     ? backendResult.modules.module2.topics.map((t, i) => {
-        const trendEntry = backendResult.modules.module4.trends.find(tr => tr.topicId === t.topicId);
+        const trendEntry = trends.find(tr => tr.topicId === t.topicId);
         const summaries = backendResult.modules.module1.summaries;
         return {
           id: t.topicId, name: t.name, keywords: t.keywords,
@@ -118,7 +120,7 @@ export default function TopicModelingSection({ backendResult }: { backendResult?
 
         {/* Trend filter */}
         <div className="flex items-center gap-1">
-          {(['all', 'rising', 'stable', 'declining'] as const).map(t => (
+          {(['all', 'rising', 'stable', 'declining', 'insufficient_data'] as const).map(t => (
             <button
               key={t}
               onClick={() => setTrendFilter(t)}
@@ -130,6 +132,8 @@ export default function TopicModelingSection({ backendResult }: { backendResult?
                     ? 'bg-amber-50 text-amber-700 border-amber-200'
                     : t === 'declining'
                     ? 'bg-rose-50 text-rose-600 border-rose-200'
+                    : t === 'insufficient_data'
+                    ? 'bg-slate-100 text-slate-600 border-slate-200'
                     : 'bg-slate-900 text-white border-transparent'
                   : 'border-gray-200 text-gray-500 hover:bg-gray-50'
               }`}
