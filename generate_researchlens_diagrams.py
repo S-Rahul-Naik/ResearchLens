@@ -27,10 +27,14 @@ from pathlib import Path
 from typing import Iterable, Sequence
 
 import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib import patheffects as pe
+from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.patches import FancyArrowPatch, FancyBboxPatch, Circle
 
 
 OUTPUT_DIR = Path(__file__).resolve().parent / "generated_diagrams"
+REPORT_PATH = OUTPUT_DIR / "researchlens_diagram_report.png"
 
 BG = "#f8fafc"
 CARD = "#ffffff"
@@ -47,6 +51,17 @@ CYAN = "#06b6d4"
 SLATE = "#64748b"
 BORDER = "#dbeafe"
 
+GRADIENTS = {
+    "teal": ("#ecfeff", "#ccfbf1", TEAL),
+    "blue": ("#eff6ff", "#dbeafe", BLUE),
+    "purple": ("#f5f3ff", "#ede9fe", PURPLE),
+    "amber": ("#fffbeb", "#fef3c7", AMBER),
+    "rose": ("#fff1f2", "#ffe4e6", ROSE),
+    "green": ("#f0fdf4", "#dcfce7", GREEN),
+    "orange": ("#fff7ed", "#ffedd5", ORANGE),
+    "slate": ("#f8fafc", "#e2e8f0", SLATE),
+}
+
 
 def make_canvas(title: str, subtitle: str | None = None):
     fig, ax = plt.subplots(figsize=(14, 9), dpi=180)
@@ -55,25 +70,46 @@ def make_canvas(title: str, subtitle: str | None = None):
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
     ax.axis("off")
+    add_background(ax)
     ax.text(0.03, 0.97, title, fontsize=20, fontweight="bold", color=TEXT, va="top")
     if subtitle:
         ax.text(0.03, 0.93, subtitle, fontsize=10, color=MUTED, va="top")
     return fig, ax
 
 
+def add_background(ax):
+    gradient = np.linspace(0, 1, 512)
+    gradient = np.vstack([gradient, gradient])
+    cmap = LinearSegmentedColormap.from_list("rl_bg", ["#f8fafc", "#eef2ff", "#ecfeff", "#ffffff"])
+    ax.imshow(gradient, extent=[0, 1, 0, 1], origin="lower", aspect="auto", cmap=cmap, alpha=0.6, zorder=0)
+
+    for (x, y), size, color, alpha in [
+        ((0.06, 0.90), 0.17, "#ccfbf1", 0.26),
+        ((0.92, 0.88), 0.15, "#dbeafe", 0.24),
+        ((0.90, 0.10), 0.18, "#fae8ff", 0.18),
+    ]:
+        ax.add_patch(Circle((x, y), size, facecolor=color, edgecolor="none", alpha=alpha, zorder=0.1))
+
+
 def add_box(ax, x: float, y: float, w: float, h: float, text: str, *, fc=CARD, ec=BORDER, color=TEXT,
-            fontsize: int = 10, weight: str = "normal", radius: float = 0.02, align: str = "center"):
+            fontsize: int = 10, weight: str = "normal", radius: float = 0.02, align: str = "center", shadow: bool = True):
     patch = FancyBboxPatch(
         (x, y), w, h,
         boxstyle=f"round,pad=0.012,rounding_size={radius}",
         linewidth=1.2,
         facecolor=fc,
         edgecolor=ec,
+        zorder=2,
     )
+    if shadow:
+        patch.set_path_effects([
+            pe.withSimplePatchShadow(offset=(0.02, -0.02), alpha=0.12, shadow_rgbFace="#94a3b8"),
+            pe.Normal(),
+        ])
     ax.add_patch(patch)
     ha = "center" if align == "center" else "left"
     tx = x + w / 2 if align == "center" else x + 0.02
-    ax.text(tx, y + h / 2, text, ha=ha, va="center", fontsize=fontsize, color=color, fontweight=weight, wrap=True)
+    ax.text(tx, y + h / 2, text, ha=ha, va="center", fontsize=fontsize, color=color, fontweight=weight, wrap=True, zorder=3)
     return patch
 
 
@@ -87,6 +123,7 @@ def add_arrow(ax, p1: tuple[float, float], p2: tuple[float, float], *, color=SLA
         color=color,
         connectionstyle=f"arc3,rad={rad}",
         alpha=alpha,
+        zorder=4,
     )
     ax.add_patch(arrow)
     return arrow
@@ -111,6 +148,18 @@ def labeled_step(ax, x: float, y: float, w: float, h: float, title: str, desc: s
     ax.text(x + 0.02, y + h - 0.08, desc, ha="left", va="top", fontsize=9, color=MUTED, wrap=True)
 
 
+def gradient_card(ax, x: float, y: float, w: float, h: float, title: str, desc: str, accent: str, palette: tuple[str, str, str]):
+    top, mid, edge = palette
+    add_box(ax, x, y, w, h, "", fc=top, ec=edge, shadow=True)
+    ax.add_patch(FancyBboxPatch((x, y + h - 0.035), w, 0.035, boxstyle="round,pad=0.01,rounding_size=0.02",
+                                linewidth=0, facecolor=mid, alpha=0.96, zorder=2.1))
+    ax.text(x + 0.02, y + h - 0.058, title, ha="left", va="top", fontsize=11.5, fontweight="bold", color=TEXT, zorder=3)
+    if desc:
+        ax.text(x + 0.02, y + h - 0.105, desc, ha="left", va="top", fontsize=9, color=MUTED, wrap=True, zorder=3)
+    if accent:
+        ax.text(x + w - 0.02, y + 0.03, accent, ha="right", va="bottom", fontsize=8.2, color=edge, fontweight="bold", zorder=3)
+
+
 def generate_system_architecture():
     fig, ax = make_canvas(
         "ResearchLens System Architecture",
@@ -126,14 +175,14 @@ def generate_system_architecture():
     python = (0.05, 0.40, 0.18, 0.16)
     llm = (0.82, 0.40, 0.12, 0.16)
 
-    add_box(ax, *user, "Researcher\nBrowser", fc="#ecfeff", ec=CYAN, fontsize=12, weight="bold")
-    add_box(ax, *web, "React + Vite UI\nDashboard / Results / Export", fc="#eff6ff", ec=BLUE, fontsize=11, weight="bold")
-    add_box(ax, *api, "Express Backend\nAuth, uploads, analysis API", fc="#f0fdf4", ec=GREEN, fontsize=11, weight="bold")
-    add_box(ax, *db, "MongoDB\nAnalysis reports + corpus", fc="#fefce8", ec=AMBER, fontsize=11, weight="bold")
-    add_box(ax, *n8n, "n8n Workflow\nOrchestration engine", fc="#faf5ff", ec=PURPLE, fontsize=11, weight="bold")
-    add_box(ax, *modules, "Analysis Modules\nSummaries, topics, gaps, trends, map", fc="#fff7ed", ec=ORANGE, fontsize=10, weight="bold")
-    add_box(ax, *python, "Python services\nTopic / gap / trend helpers", fc="#f8fafc", ec=SLATE, fontsize=10, weight="bold")
-    add_box(ax, *llm, "LLM layer\nOllama / Gemini / OpenAI", fc="#fdf2f8", ec=ROSE, fontsize=10, weight="bold")
+    gradient_card(ax, *user, "Researcher Browser", "Starts analysis and reviews results", "input", GRADIENTS["teal"])
+    gradient_card(ax, *web, "React + Vite UI", "Dashboard, results, export, and history", "frontend", GRADIENTS["blue"])
+    gradient_card(ax, *api, "Express Backend", "Auth, uploads, selection, run orchestration", "api", GRADIENTS["green"])
+    gradient_card(ax, *db, "MongoDB", "Analysis reports and corpus storage", "store", GRADIENTS["amber"])
+    gradient_card(ax, *n8n, "n8n Workflow", "Orchestration engine and webhook bridge", "automation", GRADIENTS["purple"])
+    gradient_card(ax, *modules, "Analysis Modules", "Summaries, topics, gaps, trends, map", "pipeline", GRADIENTS["orange"])
+    gradient_card(ax, *python, "Python Services", "Topic / gap / trend helpers", "helpers", GRADIENTS["slate"])
+    gradient_card(ax, *llm, "LLM Layer", "Ollama / Gemini / OpenAI", "models", GRADIENTS["rose"])
 
     connect_boxes(ax, user, web, color=TEAL)
     connect_boxes(ax, web, api, color=BLUE)
@@ -169,7 +218,8 @@ def generate_data_flow():
     boxes = {}
     for title, desc, x, y, color in steps:
         boxes[title] = (x, y, 0.16, 0.12)
-        add_box(ax, x, y, 0.16, 0.12, f"{title}\n{desc}", fc="#ffffff", ec=color, fontsize=10, weight="bold")
+        palette = GRADIENTS["teal"] if color == TEAL else GRADIENTS["blue"] if color == BLUE else GRADIENTS["purple"] if color == PURPLE else GRADIENTS["orange"] if color == ORANGE else GRADIENTS["green"] if color == GREEN else GRADIENTS["amber"]
+        gradient_card(ax, x, y, 0.16, 0.12, title, desc, title.lower(), palette)
 
     for left, right in [(steps[i][0], steps[i + 1][0]) for i in range(4)]:
         connect_boxes(ax, boxes[left], boxes[right], color=SLATE)
@@ -179,6 +229,8 @@ def generate_data_flow():
 
     ax.text(0.07, 0.54, "Important rule: dataset count ≠ processed run count", fontsize=12, fontweight="bold", color=TEXT)
     ax.text(0.07, 0.49, "All downstream views should read from the latest run object, not from the raw corpus.", fontsize=10, color=MUTED)
+    gradient_card(ax, 0.39, 0.15, 0.22, 0.12, "Latest run", "This is what Overview and Results should render", "truth source", GRADIENTS["amber"])
+    add_arrow(ax, (0.50, 0.27), (0.50, 0.24), color=AMBER)
 
     save(fig, "data_flow")
 
@@ -202,19 +254,19 @@ def generate_workflow_orchestration():
         ("10", "Scientific Honesty", "#1d4ed8"),
     ]
 
-    x0, y, w, h, gap = 0.04, 0.62, 0.085, 0.14, 0.012
+    x0, y, w, h, gap = 0.03, 0.64, 0.084, 0.12, 0.008
     boxes = []
     for idx, (num, label, color) in enumerate(names):
         x = x0 + idx * (w + gap)
-        add_box(ax, x, y, w, h, f"{num}\n{label}", fc="#ffffff", ec=color, fontsize=9, weight="bold")
+        add_box(ax, x, y, w, h, f"{num}\n{label}", fc="#ffffff", ec=color, fontsize=8.8, weight="bold")
         boxes.append((x, y, w, h))
         if idx < len(names) - 1:
             add_arrow(ax, (x + w, y + h / 2), (x + w + gap, y + h / 2), color=SLATE)
 
     ax.text(0.05, 0.44, "Input: selected papers + question", fontsize=12, color=TEXT, fontweight="bold")
-    labeled_step(ax, 0.05, 0.18, 0.26, 0.18, "n8n master workflow", "Webhooks, retries, and result normalization", fill="#faf5ff", edge=PURPLE)
-    labeled_step(ax, 0.37, 0.18, 0.26, 0.18, "Backend formatter", "Saves report, merges evidence, updates history", fill="#f0fdf4", edge=GREEN)
-    labeled_step(ax, 0.69, 0.18, 0.26, 0.18, "Frontend views", "Overview, Results, History, Export", fill="#eff6ff", edge=BLUE)
+    gradient_card(ax, 0.05, 0.18, 0.26, 0.18, "n8n master workflow", "Webhooks, retries, and result normalization", "automation", GRADIENTS["purple"])
+    gradient_card(ax, 0.37, 0.18, 0.26, 0.18, "Backend formatter", "Saves report, merges evidence, updates history", "storage", GRADIENTS["green"])
+    gradient_card(ax, 0.69, 0.18, 0.26, 0.18, "Frontend views", "Overview, Results, History, Export", "ui", GRADIENTS["blue"])
     add_arrow(ax, (0.18, 0.44), (0.18, 0.36), color=PURPLE)
     add_arrow(ax, (0.50, 0.36), (0.50, 0.30), color=GREEN)
     add_arrow(ax, (0.82, 0.36), (0.82, 0.30), color=BLUE)
@@ -235,20 +287,20 @@ def generate_topic_modeling_workflow():
         "Cluster": (0.63, 0.72, 0.16, 0.12),
         "Label": (0.82, 0.72, 0.12, 0.12),
     }
-    add_box(ax, *boxes["Input"], "Paper text\nabstract + content", fc="#ecfeff", ec=CYAN, fontsize=10, weight="bold")
-    add_box(ax, *boxes["Preprocess"], "Clean & tokenize", fc="#eff6ff", ec=BLUE, fontsize=10, weight="bold")
-    add_box(ax, *boxes["Embed"], "Embeddings", fc="#fdf2f8", ec=ROSE, fontsize=10, weight="bold")
-    add_box(ax, *boxes["Cluster"], "BERTopic / clustering", fc="#faf5ff", ec=PURPLE, fontsize=10, weight="bold")
-    add_box(ax, *boxes["Label"], "LLM label", fc="#fefce8", ec=AMBER, fontsize=10, weight="bold")
+    gradient_card(ax, *boxes["Input"], "Paper text", "abstract + content", "input", GRADIENTS["teal"])
+    gradient_card(ax, *boxes["Preprocess"], "Clean & tokenize", "remove noise", "prep", GRADIENTS["blue"])
+    gradient_card(ax, *boxes["Embed"], "Embeddings", "semantic vectors", "encode", GRADIENTS["rose"])
+    gradient_card(ax, *boxes["Cluster"], "BERTopic / clustering", "group by theme", "cluster", GRADIENTS["purple"])
+    gradient_card(ax, *boxes["Label"], "LLM label", "human-readable topic", "label", GRADIENTS["amber"])
 
     connect_boxes(ax, boxes["Input"], boxes["Preprocess"], color=BLUE)
     connect_boxes(ax, boxes["Preprocess"], boxes["Embed"], color=ROSE)
     connect_boxes(ax, boxes["Embed"], boxes["Cluster"], color=PURPLE)
     connect_boxes(ax, boxes["Cluster"], boxes["Label"], color=AMBER)
 
-    labeled_step(ax, 0.08, 0.34, 0.24, 0.18, "Topic embeddings", "Reduce papers into semantic vectors", fill="#ffffff", edge=CYAN)
-    labeled_step(ax, 0.38, 0.34, 0.24, 0.18, "Topic clusters", "Group related papers by theme", fill="#ffffff", edge=PURPLE)
-    labeled_step(ax, 0.68, 0.34, 0.24, 0.18, "Topic cards", "Name, keywords, coherence, paper counts", fill="#ffffff", edge=GREEN)
+    gradient_card(ax, 0.08, 0.34, 0.24, 0.18, "Topic embeddings", "Reduce papers into semantic vectors", "embeddings", GRADIENTS["teal"])
+    gradient_card(ax, 0.38, 0.34, 0.24, 0.18, "Topic clusters", "Group related papers by theme", "clusters", GRADIENTS["purple"])
+    gradient_card(ax, 0.68, 0.34, 0.24, 0.18, "Topic cards", "Name, keywords, coherence, paper counts", "cards", GRADIENTS["green"])
     add_arrow(ax, (0.20, 0.34), (0.38, 0.34), color=SLATE)
     add_arrow(ax, (0.62, 0.43), (0.68, 0.43), color=SLATE)
 
@@ -270,13 +322,14 @@ def generate_keyword_extraction_workflow():
     ]
     boxes = []
     for x, y, w, h, label, color in stages:
-        add_box(ax, x, y, w, h, label, fc="#ffffff", ec=color, fontsize=10, weight="bold")
+        palette = GRADIENTS["teal"] if color == TEAL else GRADIENTS["blue"] if color == BLUE else GRADIENTS["purple"] if color == PURPLE else GRADIENTS["orange"] if color == ORANGE else GRADIENTS["green"]
+        gradient_card(ax, x, y, w, h, label, "", label.lower(), palette)
         boxes.append((x, y, w, h))
     for a, b in zip(boxes, boxes[1:]):
         connect_boxes(ax, a, b, color=SLATE)
 
-    labeled_step(ax, 0.08, 0.36, 0.36, 0.18, "Keyword ranking", "Rank high-signal words from title, abstract, and content", fill="#f8fafc", edge=BLUE)
-    labeled_step(ax, 0.54, 0.36, 0.38, 0.18, "ResearchLens output", "Keywords enrich summaries, topics, and search filters", fill="#f8fafc", edge=GREEN)
+    gradient_card(ax, 0.08, 0.36, 0.36, 0.18, "Keyword ranking", "Rank high-signal words from title, abstract, and content", "ranking", GRADIENTS["blue"])
+    gradient_card(ax, 0.54, 0.36, 0.38, 0.18, "ResearchLens output", "Keywords enrich summaries, topics, and search filters", "output", GRADIENTS["green"])
     add_arrow(ax, (0.44, 0.36), (0.54, 0.36), color=GREEN)
 
     ax.text(0.08, 0.16, "Typical scoring strategies: frequency, TF-IDF, noun phrases, and LLM-assisted refinement", fontsize=11, color=MUTED)
@@ -306,13 +359,14 @@ def generate_chatbot_workflow():
     ]
     for key, title, color in labels:
         x, y, w, h = nodes[key]
-        add_box(ax, x, y, w, h, title, fc="#ffffff", ec=color, fontsize=10, weight="bold")
+        palette = GRADIENTS["teal"] if color == TEAL else GRADIENTS["blue"] if color == BLUE else GRADIENTS["purple"] if color == PURPLE else GRADIENTS["orange"] if color == ORANGE else GRADIENTS["rose"]
+        gradient_card(ax, x, y, w, h, title, "", title.lower(), palette)
     for a, b in zip(list(nodes.values()), list(nodes.values())[1:]):
         connect_boxes(ax, a, b, color=SLATE)
 
-    labeled_step(ax, 0.08, 0.34, 0.26, 0.18, "Evidence sources", "Backend papers, module 2 topics, module 3 gaps, module 4 trends", fill="#ffffff", edge=PURPLE)
-    labeled_step(ax, 0.39, 0.34, 0.26, 0.18, "RAG context", "Relevant snippets are assembled before generation", fill="#ffffff", edge=ORANGE)
-    labeled_step(ax, 0.70, 0.34, 0.22, 0.18, "Answer", "Concise response with links to evidence", fill="#ffffff", edge=GREEN)
+    gradient_card(ax, 0.06, 0.32, 0.28, 0.20, "Evidence sources", "Backend papers, topics, gaps, trends", "ground truth", GRADIENTS["purple"])
+    gradient_card(ax, 0.37, 0.32, 0.28, 0.20, "RAG context", "Relevant snippets are assembled before generation", "retrieval", GRADIENTS["orange"])
+    gradient_card(ax, 0.68, 0.32, 0.26, 0.20, "Answer", "Concise response with links to evidence", "response", GRADIENTS["green"])
     add_arrow(ax, (0.34, 0.34), (0.39, 0.34), color=ORANGE)
     add_arrow(ax, (0.65, 0.34), (0.70, 0.34), color=GREEN)
 
@@ -331,7 +385,7 @@ def generate_topic_cluster_visualization():
         (0.80, 0.68, ORANGE, "Computer vision"),
     ]
     for cx, cy, color, label in centers:
-        circ = Circle((cx, cy), 0.11, facecolor=color, alpha=0.08, edgecolor=color, linewidth=2)
+        circ = Circle((cx, cy), 0.12, facecolor=color, alpha=0.07, edgecolor=color, linewidth=2)
         ax.add_patch(circ)
         ax.text(cx, cy + 0.14, label, ha="center", va="bottom", fontsize=11, fontweight="bold", color=TEXT)
 
@@ -368,7 +422,8 @@ def generate_keyword_extraction_analysis_graph():
         (0.82, 0.70, "self-supervised", GREEN),
     ]
     for x, y, label, color in keywords:
-        add_box(ax, x - 0.055, y - 0.028, 0.11, 0.056, label, fc="#ffffff", ec=color, fontsize=9, weight="bold")
+        palette = GRADIENTS["teal"] if color == TEAL else GRADIENTS["blue"] if color == BLUE else GRADIENTS["purple"] if color == PURPLE else GRADIENTS["orange"] if color == ORANGE else GRADIENTS["green"]
+        gradient_card(ax, x - 0.055, y - 0.028, 0.11, 0.056, label, "", label[:4], palette)
 
     graph_nodes = [
         (0.18, 0.44, "paper 1", TEAL),
@@ -377,7 +432,8 @@ def generate_keyword_extraction_analysis_graph():
         (0.78, 0.44, "paper 4", ORANGE),
     ]
     for x, y, label, color in graph_nodes:
-        add_box(ax, x - 0.05, y - 0.03, 0.10, 0.06, label, fc="#f8fafc", ec=color, fontsize=9, weight="bold")
+        palette = GRADIENTS["teal"] if color == TEAL else GRADIENTS["blue"] if color == BLUE else GRADIENTS["purple"] if color == PURPLE else GRADIENTS["orange"]
+        gradient_card(ax, x - 0.05, y - 0.03, 0.10, 0.06, label, "", label, palette)
 
     # keyword-to-paper edges
     edges = [
@@ -393,6 +449,32 @@ def generate_keyword_extraction_analysis_graph():
     ax.text(0.08, 0.18, "Keywords with stronger cross-paper links are promoted into topics and gap explanations.", fontsize=11, color=MUTED)
 
     save(fig, "keyword_extraction_analysis_graph")
+
+
+def generate_report_gallery(image_paths: Sequence[Path]):
+    cols = 2
+    rows = math.ceil(len(image_paths) / cols)
+    fig, axes = plt.subplots(rows, cols, figsize=(16, rows * 4.5), dpi=180)
+    fig.patch.set_facecolor(BG)
+    axes = np.array(axes).reshape(rows, cols)
+
+    fig.suptitle("ResearchLens Diagram Report", fontsize=22, fontweight="bold", color=TEXT, y=0.995)
+    fig.text(0.5, 0.972, "All generated diagrams in one place for quick review and report embedding", ha="center", va="top", fontsize=10, color=MUTED)
+
+    for idx, ax in enumerate(axes.flat):
+        ax.set_facecolor("#ffffff")
+        ax.axis("off")
+        if idx >= len(image_paths):
+            ax.set_visible(False)
+            continue
+        img = plt.imread(image_paths[idx])
+        ax.imshow(img)
+        ax.set_title(image_paths[idx].stem.replace("_", " ").title(), fontsize=11, color=TEXT, pad=10)
+
+    fig.tight_layout(rect=[0, 0, 1, 0.965])
+    fig.savefig(REPORT_PATH, bbox_inches="tight", facecolor=fig.get_facecolor())
+    plt.close(fig)
+    print(f"Saved {REPORT_PATH}")
 
 
 def save(fig, name: str):
@@ -412,6 +494,8 @@ def main():
     generate_chatbot_workflow()
     generate_topic_cluster_visualization()
     generate_keyword_extraction_analysis_graph()
+    image_paths = sorted([p for p in OUTPUT_DIR.glob("*.png") if p.name != REPORT_PATH.name])
+    generate_report_gallery(image_paths)
     print(f"\nDone. Images written to: {OUTPUT_DIR}")
 
 
