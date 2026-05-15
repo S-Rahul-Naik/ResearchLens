@@ -1,4 +1,23 @@
 const { tokenize, topTerms, toFixedNumber } = require('../utils/text');
+const { computeEnhancedVisualization } = require('./visualizationEnhancer');
+
+function normalizeTopicId(topic, index) {
+  return topic?.topicId || topic?.id || topic?.name || `topic-${index}`;
+}
+
+function buildTopicLookup(topics) {
+  return topics.map((topic, index) => ({
+    ...topic,
+    topicId: normalizeTopicId(topic, index),
+  }));
+}
+
+function resolveTopicForPaper(paper, topics, fallbackIndex) {
+  if (!Array.isArray(topics) || topics.length === 0) return null;
+  const assigned = topics.find((topic) => Array.isArray(topic.paperIds) && topic.paperIds.includes(paper.id));
+  if (assigned) return assigned;
+  return topics[fallbackIndex % topics.length] || topics[0] || null;
+}
 
 function hashToUnit(value) {
   let hash = 0;
@@ -20,6 +39,7 @@ function paperToPoint(paper, topicIndex) {
     paperId: paper.id,
     title: paper.title,
     topicId: paper.topicId,
+    topicName: paper.topicName,
     x: toFixedNumber(centerX + noiseX * 1.8),
     y: toFixedNumber(centerY + noiseY * 1.8),
     keywords: topTerms(tokenize(`${paper.abstract} ${paper.content}`), 5)
@@ -27,18 +47,19 @@ function paperToPoint(paper, topicIndex) {
 }
 
 function runModule5Visualization(papers, topics, gaps) {
-  const topicIndexMap = new Map(topics.map((topic, idx) => [topic.topicId, idx]));
+  const normalizedTopics = buildTopicLookup(topics);
+  const topicIndexMap = new Map(normalizedTopics.map((topic, idx) => [topic.topicId, idx]));
 
   // Improve spacing: assign papers to topics more deliberately with better distribution
   const points = papers.map((paper, paperIdx) => {
-    const topicAssignment = topics.find((topic) => topic.paperIds.includes(paper.id));
-    const topicId = topicAssignment?.topicId || topics[paperIdx % topics.length]?.topicId || topics[0]?.topicId;
-    const topicIdx = topicIndexMap.get(topicId) || (paperIdx % topics.length);
-    return paperToPoint({ ...paper, topicId }, topicIdx);
+    const topicAssignment = resolveTopicForPaper(paper, normalizedTopics, paperIdx);
+    const topicId = topicAssignment?.topicId || normalizedTopics[paperIdx % normalizedTopics.length]?.topicId || normalizedTopics[0]?.topicId;
+    const topicIdx = topicIndexMap.get(topicId) ?? (normalizedTopics.length > 0 ? paperIdx % normalizedTopics.length : 0);
+    return paperToPoint({ ...paper, topicId, topicName: topicAssignment?.name || topicAssignment?.topicName || topicId }, topicIdx);
   });
 
   // Calculate topic centers with better distribution based on actual member positions
-  const topicCenters = topics.map((topic, topicIdx) => {
+  const topicCenters = normalizedTopics.map((topic, topicIdx) => {
     const members = points.filter((point) => point.topicId === topic.topicId);
     if (members.length === 0) {
       // Unassigned topic: position it on grid
@@ -79,6 +100,31 @@ function runModule5Visualization(papers, topics, gaps) {
   };
 }
 
+/**
+ * Enhanced async version using Ollama-powered force-directed layout
+ * Provides better semantic positioning like Connected Papers
+ */
+async function runModule5VisualizationWithOllama(papers, topics, gaps) {
+  try {
+    // Try to compute enhanced visualization using Ollama
+    const enhanced = await computeEnhancedVisualization(papers, topics, gaps);
+    
+    if (enhanced) {
+      return {
+        module: 'M5 Visualization Map - Enhanced',
+        map: enhanced,
+        enhancedLayout: true,
+      };
+    }
+  } catch (error) {
+    console.warn('Enhanced visualization failed, falling back to basic:', error.message);
+  }
+
+  // Fallback to basic visualization
+  return runModule5Visualization(papers, topics, gaps);
+}
+
 module.exports = {
-  runModule5Visualization
+  runModule5Visualization,
+  runModule5VisualizationWithOllama
 };

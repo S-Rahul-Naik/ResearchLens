@@ -1,123 +1,179 @@
-import { useState, useRef, useEffect } from 'react';
-import { mockChatSessions, mockQuickSuggestions, type ChatMessage } from '../../../mocks/chatData';
-import { askChatbot, type BackendPaper, type RunAllResult } from '../../../lib/api';
+import { useEffect, useRef, useState } from 'react';
+import { mockChatSessions, mockQuickSuggestions, type ChatMessage, type ChatSession } from '../../../mocks/chatData';
+import { askAboutAnalysis, askChatbot, type BackendPaper, type RunAllResult } from '../../../lib/api';
 
-function generateAnswer(query: string, realTopics: RunAllResult['modules']['module2']['topics'], realGaps: RunAllResult['modules']['module3']['gaps'], realPapers: BackendPaper[]): { content: string; citations: { paperId: string; title: string; relevance: number }[] } {
-  const q = query.toLowerCase();
-  const topics = realTopics.length > 0 ? realTopics : [];
-  const gaps = realGaps.length > 0 ? realGaps : [];
-  const papers = realPapers.length > 0 ? realPapers : [];
-    if (q.includes('gap') || q.includes('gaps')) {
-    if (gaps.length === 0) {
-      return { content: 'No research gaps were detected in this dataset.', citations: [] };
+const CHAT_SESSIONS_KEY = 'rl_chat_sessions';
+
+function getInitialTitle(message: string) {
+  const cleaned = message.trim().replace(/\s+/g, ' ');
+  if (!cleaned) return 'New chat';
+  return cleaned.length > 42 ? `${cleaned.slice(0, 42).trim()}...` : cleaned;
+}
+
+function loadChatSessions(): ChatSession[] {
+  if (typeof window === 'undefined') return mockChatSessions;
+
+  try {
+    const raw = window.localStorage.getItem(CHAT_SESSIONS_KEY);
+    if (!raw) return mockChatSessions;
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return parsed;
     }
-    const topGap = gaps[0];
-    const gapAName = (topGap as any).topicALabel || (topGap as any).topicAName || ((topGap as any).topicA || 'Topic A');
-    const gapBName = (topGap as any).topicBLabel || (topGap as any).topicBName || ((topGap as any).topicB || 'Topic B');
-    const gapScore = (topGap as any).gapScore ?? 0;
-    const similarity = (topGap as any).similarity ?? 0;
-    const coOcc = (topGap as any).coOccurrence ?? (topGap as any).coOccurrenceCount ?? 0;
-    const explanation = (topGap as any).recommendation || (topGap as any).explanation || '';
-    return {
-      content: `Based on the uploaded papers, the top research gap is between **${gapAName}** and **${gapBName}** (gap score: ${gapScore.toFixed(3)}).\n\nSimilarity: ${similarity.toFixed(2)}, Co-occurrence: ${coOcc}.\n\n${explanation}`,
-      citations: papers.slice(0, 3).map((p) => ({ paperId: p.id, title: p.title, relevance: 0.88 + Math.random() * 0.1 })),
-    };
+  } catch {
+    // Fall back to seeded mock sessions if storage is unavailable or malformed.
   }
-  if (q.includes('topic') || q.includes('cluster')) {
-    const top = topics.slice(0, 3);
-    const getTopicName = (t: typeof topics[0]) => (t as any).name ?? (t as any).topicName ?? 'Topic';
-    const getTopicPaperCount = (t: typeof topics[0]) => (t as any).paperIds?.length ?? 0;
-    const getTopicCoherence = (t: typeof topics[0]) => (t as any).coherence ?? 0;
-    return {
-      content: `The dataset contains **${topics.length} topics** detected:\n\n${top.map((t) => `• **${getTopicName(t)}** — ${getTopicPaperCount(t)} papers, coherence: ${getTopicCoherence(t).toFixed(2)}`).join('\n')}\n\n...and ${Math.max(0, topics.length - 3)} more topics.`,
-      citations: papers.slice(0, 2).map((p) => ({ paperId: p.id, title: p.title, relevance: 0.82 })),
-    };
+
+  return mockChatSessions;
+}
+
+function saveChatSessions(sessions: ChatSession[]) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(CHAT_SESSIONS_KEY, JSON.stringify(sessions));
+  } catch {
+    // Ignore storage failures; the chat still works in-memory.
   }
-  if (q.includes('federated') || q.includes('privacy')) {
-    const papersFiltered = papers.filter((p) => (p as any).topics?.includes?.('t001'));
-    return {
-      content: `Found **${papersFiltered.length} papers** on federated learning:\n\n${papersFiltered.slice(0, 3).map((p) => `• "${p.title}" (${(p as any).year ?? ''})`).join('\n')}\n\nKey themes: privacy-preserving training, non-IID data, Byzantine fault tolerance, gradient aggregation.`,
-      citations: papersFiltered.slice(0, 3).map((p) => ({ paperId: p.id, title: p.title, relevance: 0.91 + Math.random() * 0.08 })),
-    };
-  }
-  if (q.includes('trend') || q.includes('rising') || q.includes('growing')) {
-    return {
-      content: `The fastest-growing topics based on year-over-year paper counts:\n\n1. **Large Language Models** (+72% growth rate) — peaking in 2024\n2. **Clinical AI & Health** (+41% growth rate) — strongly rising\n3. **Robotics & Embodied AI** (+38% growth rate) — rising\n\nReinforcement Learning and Computer Vision remain **stable**.`,
-      citations: papers.filter((p) => (p as any).topics?.includes?.('t002')).slice(0, 2).map((p) => ({ paperId: p.id, title: p.title, relevance: 0.79 })),
-    };
-  }
-  const relevant = papers.filter((p) =>
-    p.title.toLowerCase().includes(q.split(' ')[0]) ||
-    (p as any).keywords?.some((k: string) => q.includes(k))
-  ).slice(0, 3);
-  if (relevant.length > 0) {
-    return {
-      content: `Found ${relevant.length} relevant paper(s) for your query:\n\n${relevant.map((p) => `• **"${p.title}"** — ${p.authors[0]}, ${p.year}\n  ${p.abstract.slice(0, 120)}...`).join('\n\n')}`,
-      citations: relevant.map((p) => ({ paperId: p.id, title: p.title, relevance: 0.84 + Math.random() * 0.12 })),
-    };
-  }
-  const topicNames = topics ? topics.map(t => t.name).slice(0, 4).join(', ') : 'Federated Learning, Large Language Models, Computer Vision, Knowledge Graphs';
-  return {
-    content: `I searched through ${papers.length} uploaded papers for "${query}".\n\nI didn't find highly specific results, but the dataset covers: **${topicNames}** and more.\n\nTry asking about specific topics, research gaps, or paper trends.`,
-    citations: papers.slice(0, 2).map((p) => ({ paperId: p.id, title: p.title, relevance: 0.65 })),
-  };
 }
 
 export default function ChatbotSection({ papers = [], backendResult }: { papers?: BackendPaper[]; backendResult?: RunAllResult | null }) {
-  const [sessions] = useState(mockChatSessions);
-  const [activeSessionId, setActiveSessionId] = useState(sessions[0].id);
-  const [messages, setMessages] = useState<ChatMessage[]>(sessions[0].messages);
+  const [sessions, setSessions] = useState<ChatSession[]>(() => loadChatSessions());
+  const [activeSessionId, setActiveSessionId] = useState<string>(() => loadChatSessions()[0]?.id ?? 'new');
+  const [messages, setMessages] = useState<ChatMessage[]>(() => loadChatSessions()[0]?.messages ?? []);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (sessions.length > 0) {
+      saveChatSessions(sessions);
+    }
+  }, [sessions]);
+
+  useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  useEffect(() => {
+    const activeSession = sessions.find((session) => session.id === activeSessionId);
+    setMessages(activeSession?.messages ?? []);
+  }, [activeSessionId, sessions]);
+
+  const syncSessionMessages = (sessionId: string, nextMessages: ChatMessage[]) => {
+    setSessions((prev) => {
+      const next = prev.map((session) => {
+        if (session.id !== sessionId) return session;
+        const firstUserMessage = nextMessages.find((message) => message.role === 'user');
+        const title = firstUserMessage ? getInitialTitle(firstUserMessage.content) : session.title;
+        return { ...session, title, messages: nextMessages };
+      });
+      saveChatSessions(next);
+      return next;
+    });
+  };
+
+  const createNewChat = () => {
+    const newSession: ChatSession = {
+      id: `cs-${Date.now()}`,
+      title: 'New chat',
+      createdAt: new Date().toISOString(),
+      paperCount: papers.length,
+      messages: [],
+    };
+
+    setSessions((prev) => {
+      const next = [newSession, ...prev];
+      saveChatSessions(next);
+      return next;
+    });
+    setActiveSessionId(newSession.id);
+    setMessages([]);
+  };
+
+  const deleteChat = (sessionId: string) => {
+    let nextSessions: ChatSession[] = [];
+    setSessions((prev) => {
+      const next = prev.filter((session) => session.id !== sessionId);
+      nextSessions = next;
+      saveChatSessions(next);
+      return next;
+    });
+
+    if (activeSessionId === sessionId) {
+      const nextActive = nextSessions[0];
+      if (nextActive) {
+        setActiveSessionId(nextActive.id);
+        setMessages(nextActive.messages);
+      } else {
+        setActiveSessionId('new');
+        setMessages([]);
+      }
+    }
+  };
 
   const handleSend = async (text?: string) => {
     const q = (text ?? input).trim();
     if (!q) return;
     setInput('');
     const userMsg: ChatMessage = { id: `m-${Date.now()}`, role: 'user', content: q, timestamp: new Date().toISOString() };
-    setMessages((prev) => [...prev, userMsg]);
     setLoading(true);
 
+    const currentSessionMessages = sessions.find((session) => session.id === activeSessionId)?.messages ?? messages;
+    const nextMessages = [...currentSessionMessages, userMsg];
+
+    setMessages(nextMessages);
+
     let botMsg: ChatMessage;
-    if (papers.length > 0) {
-      // Real backend RAG call
-      try {
-        const result = await askChatbot(papers, q);
-        botMsg = {
-          id: `m-${Date.now()}-bot`,
-          role: 'assistant',
-          content: result.answer,
-          citations: result.citations.map(c => ({ paperId: c.paperId, title: c.title, relevance: c.relevance })),
-          timestamp: new Date().toISOString(),
-        };
-      } catch {
-        botMsg = {
-          id: `m-${Date.now()}-bot`,
-          role: 'assistant',
-          content: 'Sorry, I could not reach the backend. Please check that the server is running.',
-          timestamp: new Date().toISOString(),
-        };
+    try {
+      let result;
+
+      // Match Section 6 behavior: prefer analysis payload chat when available.
+      if (backendResult) {
+        result = await askAboutAnalysis(q, backendResult);
+      } else if (papers.length > 0) {
+        result = await askChatbot(papers, q);
+      } else {
+        throw new Error('Run an analysis or load papers first to ask a question.');
       }
-    } else {
-      // Mock fallback when no papers are loaded
-      await new Promise((r) => setTimeout(r, 1200 + Math.random() * 600));
-      const answer = generateAnswer(q, backendResult?.modules.module2.topics ?? [], backendResult?.modules.module3.gaps ?? [], papers);
+
       botMsg = {
         id: `m-${Date.now()}-bot`,
         role: 'assistant',
-        content: answer.content,
-        citations: answer.citations,
+        content: result.answer,
+        citations: (result.citations ?? []).map((c) => ({ paperId: c.paperId, title: c.title, relevance: c.relevance })),
+        timestamp: new Date().toISOString(),
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Sorry, I could not reach the backend. Please check that the server is running.';
+      botMsg = {
+        id: `m-${Date.now()}-bot`,
+        role: 'assistant',
+        content: message,
         timestamp: new Date().toISOString(),
       };
     }
 
-    setMessages((prev) => [...prev, botMsg]);
+    const finalMessages = [...nextMessages, botMsg];
+    setMessages(finalMessages);
     setLoading(false);
+
+    if (activeSessionId === 'new') {
+      const newSession: ChatSession = {
+        id: `cs-${Date.now()}`,
+        title: getInitialTitle(q),
+        createdAt: new Date().toISOString(),
+        paperCount: papers.length,
+        messages: nextMessages,
+      };
+      setSessions((prev) => {
+        const next = [newSession, ...prev];
+        saveChatSessions(next);
+        return next;
+      });
+      setActiveSessionId(newSession.id);
+    } else {
+      syncSessionMessages(activeSessionId, finalMessages);
+    }
   };
 
   const formatContent = (text: string) => {
@@ -139,19 +195,32 @@ export default function ChatbotSection({ papers = [], backendResult }: { papers?
         </div>
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
           {sessions.map((s) => (
-            <button
+            <div
               key={s.id}
-              onClick={() => { setActiveSessionId(s.id); setMessages(s.messages); }}
-              className={`whitespace-nowrap w-full text-left p-3 rounded-xl transition-colors cursor-pointer ${activeSessionId === s.id ? 'bg-teal-50 border border-teal-100' : 'hover:bg-gray-50'}`}
+              className={`group rounded-xl transition-colors ${activeSessionId === s.id ? 'bg-teal-50 border border-teal-100' : 'hover:bg-gray-50 border border-transparent'}`}
             >
-              <p className="text-xs font-medium text-gray-800 line-clamp-2 mb-1">{s.title}</p>
-              <p className="text-[10px] text-gray-400">{s.paperCount} papers · {new Date(s.createdAt).toLocaleDateString()}</p>
-            </button>
+              <div className="flex items-start gap-1.5 p-2">
+              <button
+                onClick={() => setActiveSessionId(s.id)}
+                className="flex-1 min-w-0 text-left p-1.5 rounded-lg cursor-pointer"
+              >
+                <p className="text-xs font-medium text-gray-800 line-clamp-2 mb-1">{s.title}</p>
+                <p className="text-[10px] text-gray-400">{s.paperCount} papers · {new Date(s.createdAt).toLocaleDateString()}</p>
+              </button>
+              <button
+                onClick={() => deleteChat(s.id)}
+                title="Delete chat"
+                className="mt-1 w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 hover:text-rose-500 hover:bg-rose-50 cursor-pointer opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity"
+              >
+                <i className="ri-delete-bin-6-line text-xs" />
+              </button>
+              </div>
+            </div>
           ))}
         </div>
         <div className="p-3 border-t border-gray-100">
           <button
-            onClick={() => { setMessages([]); setActiveSessionId('new'); }}
+            onClick={createNewChat}
             className="whitespace-nowrap w-full py-2 bg-[#0f766e] text-white text-xs font-semibold rounded-lg hover:bg-[#0d6b62] transition-colors cursor-pointer flex items-center justify-center gap-1.5"
           >
             <i className="ri-add-line" /> New Chat

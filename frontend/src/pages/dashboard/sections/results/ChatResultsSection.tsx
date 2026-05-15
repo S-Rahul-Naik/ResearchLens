@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { askChatbot, type BackendPaper, type ChatbotResult, type RunAllResult } from '../../../../lib/api';
+import { askChatbot, askAboutAnalysis, type BackendPaper, type ChatbotResult, type RunAllResult } from '../../../../lib/api';
 
 function formatContent(text: string) {
   return text.split('\n\n').map((paragraph, index) => {
@@ -28,8 +28,9 @@ export default function ChatResultsSection({ backendResult, papers = [] }: { bac
     const trimmed = query.trim();
     if (!trimmed || loading) return;
 
-    if (papers.length === 0) {
-      setError('Load or upload papers first to ask a RAG question.');
+    // Require either analysis payload or papers
+    if (!backendResult && papers.length === 0) {
+      setError('Run an analysis or load papers first to ask a question.');
       return;
     }
 
@@ -40,7 +41,16 @@ export default function ChatResultsSection({ backendResult, papers = [] }: { bac
     setCitations([]);
 
     try {
-      const result = await askChatbot(papers, trimmed);
+      let result: ChatbotResult;
+
+      // Prefer analysis-based chat (faster, uses n8n payload) when available
+      if (backendResult) {
+        result = await askAboutAnalysis(trimmed, backendResult);
+      } else {
+        // Fallback to paper-based chat
+        result = await askChatbot(papers, trimmed);
+      }
+
       if (!result || typeof result !== 'object') {
         setError('Invalid response from server. Please try again.');
         return;

@@ -14,7 +14,7 @@ export default function TrendAnalysisSection({ backendResult }: { backendResult?
 
   // Normalize to a common display type
   interface DisplayTrend {
-    topicId: string; topicName: string; color: string;
+    topicId: string; topic: string; topicName: string; color: string;
     trend: 'rising' | 'stable' | 'declining' | 'insufficient_data';
     growthRate: number; peakYear: number;
     dataPoints: { year: number; count: number }[];
@@ -36,6 +36,8 @@ export default function TrendAnalysisSection({ backendResult }: { backendResult?
     return Array.isArray(trendsList) ? trendsList : [];
   };
 
+  const topicNameById = new Map((br?.modules?.module2?.topics ?? []).map((topic: any) => [String(topic.topicId || topic.id || topic.name), topic.name]));
+
   const trends: DisplayTrend[] = getTrendsList().map((t: any, i: number) => {
     const yearlyCounts = t.yearlyCounts || t.dataPoints || [];
     const color = TOPIC_COLORS[i % TOPIC_COLORS.length];
@@ -45,9 +47,11 @@ export default function TrendAnalysisSection({ backendResult }: { backendResult?
     const maxC = yearlyCounts.length > 0 ? Math.max(...yearlyCounts.map((yc: any) => yc.count), 1) : 1;
     const minC = yearlyCounts.length > 0 ? Math.min(...yearlyCounts.map((yc: any) => yc.count), 0) : 0;
     const growthRate = maxC > 0 ? (maxC - minC) / maxC : 0;
+    const topicLabel = t.topic || t.topicName || t.name || topicNameById.get(String(t.topicId)) || topicNameById.get(String(t.topicId).replace(/^topic[-_]?/, 'topic_')) || '';
     return {
       topicId: t.topicId || `topic-${i}`,
-      topicName: t.topicName || `Topic ${i + 1}`,
+      topic: topicLabel,
+      topicName: t.topicName || topicLabel,
       color,
       trend: t.trend || 'insufficient_data',
       growthRate,
@@ -65,6 +69,9 @@ export default function TrendAnalysisSection({ backendResult }: { backendResult?
 
   const allYears = Array.from(new Set(trends.flatMap(t => t.dataPoints.map(d => d.year)))).sort();
   const maxCount = Math.max(...trends.flatMap(t => t.dataPoints.map(d => d.count)), 1);
+  const risingCount = trends.filter(t => t.trend === 'rising').length;
+  const stableCount = trends.filter(t => t.trend === 'stable').length;
+  const decliningCount = trends.filter(t => t.trend === 'declining').length;
 
   return (
     <section id="result-trends" className="mb-12">
@@ -81,20 +88,25 @@ export default function TrendAnalysisSection({ backendResult }: { backendResult?
       {/* Summary row */}
       <div className="grid grid-cols-3 gap-4 mb-6">
         {[
-          { label: 'Rising Topics', value: trends.filter(t => t.trend === 'rising').length, icon: 'ri-arrow-right-up-line', color: 'text-emerald-700', bg: 'bg-emerald-50' },
-          { label: 'Stable Topics', value: trends.filter(t => t.trend === 'stable').length, icon: 'ri-arrow-right-line', color: 'text-amber-700', bg: 'bg-amber-50' },
-          { label: 'Fastest Growing', value: trends.length > 0 ? [...trends].sort((a, b) => b.growthRate - a.growthRate)[0].topicName : '—', icon: 'ri-rocket-line', color: 'text-teal-700', bg: 'bg-teal-50', small: true },
+          { label: 'Rising Topics', value: risingCount, icon: 'ri-arrow-right-up-line', color: 'text-emerald-700', bg: 'bg-emerald-50' },
+          { label: 'Stable Topics', value: stableCount, icon: 'ri-arrow-right-line', color: 'text-amber-700', bg: 'bg-amber-50' },
+          { label: 'Declining Topics', value: decliningCount, icon: 'ri-arrow-right-down-line', color: 'text-rose-700', bg: 'bg-rose-50' },
         ].map(s => (
           <div key={s.label} className={`rounded-xl border border-gray-100 ${s.bg} px-5 py-4 flex items-center gap-3`}>
             <div className={`w-9 h-9 flex items-center justify-center rounded-lg bg-white ${s.color}`}>
               <i className={`${s.icon} text-base`} />
             </div>
             <div>
-              <div className={`${s.small ? 'text-sm' : 'text-2xl'} font-bold ${s.color}`}>{s.value}</div>
+              <div className={`text-2xl font-bold ${s.color}`}>{s.value}</div>
               <div className="text-xs text-gray-500">{s.label}</div>
             </div>
           </div>
         ))}
+      </div>
+
+      <div className="flex items-center justify-between mb-4 text-xs text-gray-500">
+        <span>Total trend topics detected</span>
+        <span className="font-semibold text-gray-700">{trends.length}</span>
       </div>
 
       {/* Per-topic bars or empty state */}
@@ -105,15 +117,16 @@ export default function TrendAnalysisSection({ backendResult }: { backendResult?
         </div>
       ) : (
       <div className="space-y-4">
-        {[...trends].sort((a, b) => b.growthRate - a.growthRate).map(topic => {
+        {trends.map(topic => {
           const trend = TREND_CONFIG[topic.trend] ?? TREND_CONFIG.stable;
+          const displayName = topic.topic || topic.topicName || topicNameById.get(topic.topicId) || 'Unknown trend';
 
           return (
             <div key={topic.topicId} className="bg-white rounded-xl border border-gray-100 p-5">
               {/* Topic header */}
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: topic.color }} />
-                <span className="text-sm font-semibold text-gray-900">{topic.topicName}</span>
+                <span className="text-sm font-semibold text-gray-900">{displayName}</span>
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${trend.bg} ${trend.color} flex items-center gap-1`}>
                   <i className={`${trend.icon} text-[10px]`} />
                   {trend.label}

@@ -706,6 +706,7 @@ function formatN8NResults(n8nResponse, papers) {
       if (typeof trend === 'string') {
         return {
           topicId: topicsForLookup[idx]?.topicId || `topic_${idx + 1}`,
+          topic: trend,
           topicName: topicsForLookup[idx]?.name || `Trend ${idx + 1}`,
           yearlyCounts: [{ year: currentYear, count: 1 }],
           slope: 0,
@@ -719,9 +720,11 @@ function formatN8NResults(n8nResponse, papers) {
           ? trend.trend
           : 'stable';
         const summaryText = trend.llm_trend_summary || trend.llmTrendSummary || trend.description || trend.summary;
+        const topicLabel = trend.topic || trend.topicName || trend.name || topicsForLookup[idx]?.name || `Topic ${idx + 1}`;
         return {
           topicId: trend.topicId || `topic_${idx + 1}`,
-          topicName: trend.topicName || trend.name || topicsForLookup[idx]?.name || `Topic ${idx + 1}`,
+          topic: trend.topic || topicLabel,
+          topicName: trend.topicName || trend.name || trend.topic || topicsForLookup[idx]?.name || `Topic ${idx + 1}`,
           yearlyCounts: Array.isArray(trend.yearlyCounts) && trend.yearlyCounts.length > 0
             ? trend.yearlyCounts
             : [{ year: currentYear, count: Number(trend.count) || 1 }],
@@ -859,9 +862,11 @@ function formatN8NResults(n8nResponse, papers) {
       ? reportSummary
       : (typeof summarization?.summary === 'string' && summarization.summary.trim() ? summarization.summary : reportSummary);
 
-    // If reportMarkdown is empty, synthesize it from modules
+    // If reportMarkdown is empty or missing trend content, synthesize it from modules.
     let finalReportMarkdown = reportMarkdown;
-    if (!finalReportMarkdown || finalReportMarkdown.trim() === '') {
+    const hasTrendItems = typeof finalReportMarkdown === 'string' && /###\s+(Rising Topics|Declining Topics)[\s\S]*?-\s+\*\*/i.test(finalReportMarkdown);
+    const hasTrendData = Array.isArray(module4Data.module4_trends) && module4Data.module4_trends.length > 0;
+    if (!finalReportMarkdown || finalReportMarkdown.trim() === '' || (hasTrendData && !hasTrendItems)) {
       finalReportMarkdown = synthesizeReportMarkdown(module1Data, module2Data, module3Data, module4Data, module5Data, module10Data);
     }
 

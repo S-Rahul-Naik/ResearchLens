@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { PointResult, RunAllResult } from '../../../../lib/api';
+import { regenerateVisualizationWithOllama } from '../../../../lib/api';
 
 const TOPIC_COLORS = ['#0d9488', '#f59e0b', '#8b5cf6', '#e11d48', '#3b82f6', '#ec4899', '#10b981', '#f97316'];
 
@@ -58,6 +59,23 @@ interface TopicLabel {
   paperIds: string[];
 }
 
+function normalizeTopicId(topic: { topicId?: string; id?: string; name?: string }, index: number) {
+  return topic.topicId || topic.id || topic.name || `topic-${index}`;
+}
+
+function normalizeKey(value: string | undefined | null) {
+  return String(value ?? '').trim().toLowerCase();
+}
+
+function stableHash(input: string) {
+  let hash = 0;
+  for (let i = 0; i < input.length; i += 1) {
+    hash = ((hash << 5) - hash) + input.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+
 function bezierCurve(
   x1: number,
   y1: number,
@@ -99,37 +117,130 @@ export default function ResearchMapResultsSection({ backendResult }: { backendRe
   });
   const [hoveredGap, setHoveredGap] = useState<string | null>(null);
   const [hoveredTopic, setHoveredTopic] = useState<string | null>(null);
+  const [selectedPoint, setSelectedPoint] = useState<AdaptedPoint | null>(null);
+  const [selectedGap, setSelectedGap] = useState<string | null>(null);
+  const [regenerating, setRegenerating] = useState(false);
+  const [regenerateError, setRegenerateError] = useState<string | null>(null);
+  const [mapOverride, setMapOverride] = useState<RunAllResult['modules']['module5'] | null>(null);
+  const [showMapGuide, setShowMapGuide] = useState(false);
+  const autoRegeneratedForRef = useRef<string | null>(null);
 
-  const br = backendResult;
+  useEffect(() => {
+    setMapOverride(null);
+    autoRegeneratedForRef.current = null;
+  }, [backendResult]);
+
+  const br = useMemo(() => {
+    if (!backendResult) return backendResult;
+    if (!mapOverride) return backendResult;
+    return {
+      ...backendResult,
+      modules: {
+        ...backendResult.modules,
+        module5: mapOverride,
+      },
+    };
+  }, [backendResult, mapOverride]);
+
   const topics = br?.modules?.module2?.topics ?? [];
   const mapPoints = br?.modules?.module5?.map?.points ?? [];
   const mapLinks = br?.modules?.module5?.map?.links ?? [];
   const gaps = br?.modules?.module3?.gaps ?? [];
 
+  const normalizedTopics = useMemo(() => {
+    return topics.map((topic, index) => ({
+      ...topic,
+      topicId: normalizeTopicId(topic, index),
+    }));
+  }, [topics]);
+
+  const paperTopicMap = useMemo(() => {
+    const map = new Map<string, string>();
+    normalizedTopics.forEach((topic) => {
+      (topic.paperIds || []).forEach((paperId: string) => {
+        map.set(paperId, topic.topicId);
+      });
+    });
+    return map;
+  }, [normalizedTopics]);
+
+  const topicIdByName = useMemo(() => {
+    const map = new Map<string, string>();
+    normalizedTopics.forEach((topic) => {
+      map.set(normalizeKey(topic.name), topic.topicId);
+      map.set(normalizeKey(topic.topicName), topic.topicId);
+    });
+    return map;
+  }, [normalizedTopics]);
+
+  const generatedMapPoints = useMemo<PointResult[]>(() => {
+    if (normalizedTopics.length === 0) return [];
+
+    const centers = normalizedTopics.map((topic, index) => {
+      const total = Math.max(1, normalizedTopics.length);
+      const theta = (2 * Math.PI * index) / total;
+      return {
+        topicId: topic.topicId,
+        x: Math.cos(theta) * 0.7,
+        y: Math.sin(theta) * 0.7,
+      };
+    });
+    const centerByTopicId = new Map(centers.map((center) => [center.topicId, center]));
+
+    return normalizedTopics.flatMap((topic) => {
+      const paperIds = Array.isArray(topic.paperIds) ? topic.paperIds.map((id) => String(id)) : [];
+      const center = centerByTopicId.get(topic.topicId) ?? { x: 0, y: 0 };
+      const total = Math.max(1, paperIds.length);
+      return paperIds.map((paperId, index) => {
+        const seed = stableHash(`${topic.topicId}-${paperId}`);
+        const angle = ((2 * Math.PI * index) / total) + ((seed % 360) * Math.PI / 1800);
+        const radius = 0.14 + ((seed % 40) / 1000) + ((index % 3) * 0.02);
+        return {
+          paperId,
+          title: `Paper ${paperId}`,
+          topicId: topic.topicId,
+          x: center.x + (Math.cos(angle) * radius),
+          y: center.y + (Math.sin(angle) * radius),
+          keywords: [],
+        };
+      });
+    });
+  }, [normalizedTopics]);
+
+  const effectiveMapPoints = mapPoints.length > 0 ? mapPoints : generatedMapPoints;
+
   const adaptedPoints = useMemo(() => {
-    if (!br || mapPoints.length === 0) return [];
+    if (!br || effectiveMapPoints.length === 0) return [];
 
     const topicColorMap = new Map<string, string>();
     const topicNameMap = new Map<string, string>();
-    topics.forEach((t, i) => {
+    normalizedTopics.forEach((t, i) => {
       topicColorMap.set(t.topicId, TOPIC_COLORS[i % TOPIC_COLORS.length]);
       topicNameMap.set(t.topicId, t.name);
     });
 
-    return mapPoints.map((p) => {
+    return effectiveMapPoints.map((p) => {
       const point = p as PointResult & { year?: number };
+      const pointTopicId =
+        point.topicId ||
+        paperTopicMap.get(point.paperId) ||
+        topicIdByName.get(normalizeKey((point as any).topicName)) ||
+        topicIdByName.get(normalizeKey(point.title)) ||
+        normalizedTopics[0]?.topicId ||
+        point.topicName ||
+        point.title;
       return {
         paperId: point.paperId,
         title: point.title,
         x: point.x,
         y: point.y,
-        topicId: point.topicId,
-        topicName: topicNameMap.get(point.topicId) ?? point.topicId,
-        color: topicColorMap.get(point.topicId) ?? '#6b7280',
+        topicId: pointTopicId,
+        topicName: topicNameMap.get(pointTopicId) ?? (point as any).topicName ?? pointTopicId,
+        color: topicColorMap.get(pointTopicId) ?? '#6b7280',
         year: point.year ?? new Date().getFullYear(),
       };
     });
-  }, [br, mapPoints, topics]);
+  }, [br, effectiveMapPoints, normalizedTopics, paperTopicMap, topicIdByName]);
 
   const normalizedPoints = useMemo(() => {
     if (adaptedPoints.length === 0) return [];
@@ -167,25 +278,25 @@ export default function ResearchMapResultsSection({ backendResult }: { backendRe
         id: gap?.gapId ?? `gap-${i}`,
         topicAId: mapLink.sourceTopicId,
         topicBId: mapLink.targetTopicId,
-        topicAName: topics.find(t => t.topicId === mapLink.sourceTopicId)?.name ?? mapLink.sourceTopicId,
-        topicBName: topics.find(t => t.topicId === mapLink.targetTopicId)?.name ?? mapLink.targetTopicId,
+        topicAName: normalizedTopics.find(t => t.topicId === mapLink.sourceTopicId)?.name ?? mapLink.sourceTopicId,
+        topicBName: normalizedTopics.find(t => t.topicId === mapLink.targetTopicId)?.name ?? mapLink.targetTopicId,
         gapScore: gap?.gapScore ?? mapLink.gapScore ?? 0,
-        explanation: gap?.explanation ?? gap?.recommendation ?? `Gap between ${topics.find(t => t.topicId === mapLink.sourceTopicId)?.name ?? mapLink.sourceTopicId} and ${topics.find(t => t.topicId === mapLink.targetTopicId)?.name ?? mapLink.targetTopicId}.`,
+        explanation: gap?.explanation ?? gap?.recommendation ?? `Gap between ${normalizedTopics.find(t => t.topicId === mapLink.sourceTopicId)?.name ?? mapLink.sourceTopicId} and ${normalizedTopics.find(t => t.topicId === mapLink.targetTopicId)?.name ?? mapLink.targetTopicId}.`,
         reliability: gap?.reliability,
         severity: gap?.severity ?? mapLink.severity,
         similarityScore: gap?.similarity,
         coOccurrenceCount: gap?.coOccurrence,
       };
     });
-  }, [br, gaps, mapLinks, topics]);
+  }, [br, gaps, mapLinks, normalizedTopics]);
 
   const allTopicIds = useMemo(() => {
-    return topics.map((t, i) => t.topicId || t.name || `topic-${i}`);
-  }, [topics]);
+    return normalizedTopics.map((t) => t.topicId);
+  }, [normalizedTopics]);
 
   const topicLabels = useMemo<TopicLabel[]>(() => {
-    return topics.map((t, i) => {
-      const safeId = t.topicId || t.name || `topic-${i}`;
+    return normalizedTopics.map((t, i) => {
+      const safeId = t.topicId;
       return {
         key: safeId,
         id: safeId,
@@ -194,13 +305,28 @@ export default function ResearchMapResultsSection({ backendResult }: { backendRe
         paperIds: t.paperIds,
       };
     });
-  }, [topics]);
+  }, [normalizedTopics]);
 
   const centroids = useMemo(() => {
-    return allTopicIds
+    const byTopic = allTopicIds
       .map((id) => getCentroid(id, normalizedPoints))
       .filter((c): c is Centroid => c !== null);
-  }, [allTopicIds, normalizedPoints]);
+
+    if (byTopic.length > 0) return byTopic;
+
+    const fallbackCenters = br?.modules?.module5?.map?.topicCenters ?? [];
+    return normalizedTopics.map((topic, index) => {
+      const fallback = fallbackCenters.find((center: any) => normalizeKey(center.topicId) === normalizeKey(topic.topicId) || normalizeKey(center.name) === normalizeKey(topic.name));
+      return {
+        x: Number(fallback?.x ?? 120 + (index % 3) * 180),
+        y: Number(fallback?.y ?? 120 + Math.floor(index / 3) * 120),
+        topicId: topic.topicId,
+        topicName: topic.name,
+        color: TOPIC_COLORS[index % TOPIC_COLORS.length],
+        paperCount: (topic.paperIds || []).length,
+      };
+    });
+  }, [allTopicIds, br, normalizedPoints, normalizedTopics]);
 
   // Topic halos
   const topicHalos = useMemo(() => {
@@ -216,10 +342,17 @@ export default function ResearchMapResultsSection({ backendResult }: { backendRe
     });
   }, [centroids, normalizedPoints]);
 
-  const activeGap = useMemo(() => {
+  const selectedGapObj = useMemo(() => {
+    if (!selectedGap) return null;
+    return adaptedGaps.find((g) => g.id === selectedGap) || null;
+  }, [selectedGap, adaptedGaps]);
+
+  const hoveredGapObj = useMemo(() => {
     if (!hoveredGap) return null;
-    return adaptedGaps.find(g => g.id === hoveredGap) || null;
+    return adaptedGaps.find((g) => g.id === hoveredGap) || null;
   }, [hoveredGap, adaptedGaps]);
+
+  const activeGap = selectedGapObj ?? hoveredGapObj;
 
   const handlePaperEnter = (
     e: React.MouseEvent,
@@ -252,6 +385,20 @@ export default function ResearchMapResultsSection({ backendResult }: { backendRe
     setTooltip((prev) => ({ ...prev, visible: false }));
   };
 
+  const handlePaperClick = (pt: AdaptedPoint) => {
+    if (selectedPoint?.paperId === pt.paperId) {
+      setSelectedPoint(null);
+    } else {
+      setSelectedPoint(pt);
+      setSelectedGap(null);
+    }
+  };
+
+  const handleGapClick = (gapId: string) => {
+    setSelectedGap((prev) => (prev === gapId ? null : gapId));
+    setSelectedPoint(null);
+  };
+
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
       if (!tooltip.visible) return;
@@ -266,6 +413,35 @@ export default function ResearchMapResultsSection({ backendResult }: { backendRe
     window.addEventListener('mousemove', onMove);
     return () => window.removeEventListener('mousemove', onMove);
   }, [tooltip.visible]);
+
+  const handleRegenerateMap = async () => {
+    try {
+      setRegenerating(true);
+      setRegenerateError(null);
+      if (!backendResult) {
+        setRegenerateError('Analysis data is missing');
+        return;
+      }
+      const updated = await regenerateVisualizationWithOllama(backendResult);
+      setMapOverride(updated.modules?.module5 ?? null);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Failed to regenerate map';
+      setRegenerateError(msg);
+      console.error('Map regeneration error:', error);
+    } finally {
+      setRegenerating(false);
+    }
+  };
+
+  useEffect(() => {
+    const runKey = backendResult?.id || backendResult?.createdAt || null;
+    if (!backendResult || !runKey) return;
+    if (autoRegeneratedForRef.current === runKey) return;
+    if (regenerating || mapPoints.length === 0 || topics.length === 0 || gaps.length === 0) return;
+
+    autoRegeneratedForRef.current = runKey;
+    void handleRegenerateMap();
+  }, [backendResult, gaps.length, mapPoints.length, regenerating, topics.length]);
 
   return (
     <section id="result-map" className="mb-12">
@@ -282,7 +458,35 @@ export default function ResearchMapResultsSection({ backendResult }: { backendRe
             Research Map Visualization
           </h2>
         </div>
+        <button
+          type="button"
+          onClick={() => setShowMapGuide((prev) => !prev)}
+          className={`ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${showMapGuide ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+          title="Explain how to read the research map"
+        >
+          <i className="ri-information-line text-sm" />
+          Info
+        </button>
       </div>
+
+      {showMapGuide && (
+        <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 shadow-sm">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 w-8 h-8 flex items-center justify-center rounded-lg bg-slate-900 text-white shrink-0">
+              <i className="ri-lightbulb-line text-sm" />
+            </div>
+            <div className="space-y-2">
+              <p className="text-sm font-semibold text-slate-900">How to analyse this visual map</p>
+              <p className="text-sm text-slate-600 leading-relaxed">
+                Start with the topic centers at the bottom. Each color represents one topic cluster. Papers that sit closer to the same center are more related, while papers farther away are more unique or cross-topic.
+              </p>
+              <p className="text-sm text-slate-600 leading-relaxed">
+                Look for dense clusters to identify well-studied areas, isolated dots to find outliers, and dashed red links to spot research gaps between topics. Hover over papers and gap lines to see details.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
         {/* Top bar: legend + stats */}
@@ -321,6 +525,30 @@ export default function ResearchMapResultsSection({ backendResult }: { backendRe
             <span className="text-[11px] text-rose-500 font-medium">
               {adaptedGaps.length} critical gaps
             </span>
+            <span className="w-px h-3 bg-gray-200" />
+            <button
+              onClick={handleRegenerateMap}
+              disabled={regenerating}
+              className="px-3 py-1 text-[11px] font-medium text-blue-600 hover:bg-blue-50 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+              title="Regenerate with AI-powered force-directed layout (like Connected Papers)"
+            >
+              <i className={`ri-refresh-line ${regenerating ? 'animate-spin' : ''}`} />
+              {regenerating ? 'Regenerating...' : 'Regenerate Map'}
+            </button>
+            {regenerateError && (
+              <span className="text-[11px] text-red-500">{regenerateError}</span>
+            )}
+          </div>
+        </div>
+
+        <div className="px-5 pt-4 pb-3 border-b border-gray-100 bg-slate-50/70">
+          <div className="rounded-lg border border-slate-100 bg-white px-4 py-3 shadow-sm">
+            <p className="text-[11px] font-semibold text-slate-900 mb-1">How to read this map</p>
+            <p className="text-[11px] leading-relaxed text-slate-600">
+              Each dot is a paper. Dots near the same topic center are more semantically similar.
+              Hollow circles show topic clusters, the soft glow shows the cluster area, and dashed red curves
+              connect topics with detected gaps or weak overlap. Use hover to inspect paper titles and gap details.
+            </p>
           </div>
         </div>
 
@@ -398,6 +626,7 @@ export default function ResearchMapResultsSection({ backendResult }: { backendRe
                     style={{ cursor: 'pointer' }}
                     onMouseEnter={() => setHoveredGap(gap.id)}
                     onMouseLeave={() => setHoveredGap(null)}
+                    onClick={() => handleGapClick(gap.id)}
                   />
                   {/* Gap midpoint marker */}
                   <circle
@@ -410,6 +639,7 @@ export default function ResearchMapResultsSection({ backendResult }: { backendRe
                     style={{ cursor: 'pointer' }}
                     onMouseEnter={() => setHoveredGap(gap.id)}
                     onMouseLeave={() => setHoveredGap(null)}
+                    onClick={() => handleGapClick(gap.id)}
                   />
                 </g>
               );
@@ -528,6 +758,7 @@ export default function ResearchMapResultsSection({ backendResult }: { backendRe
                   onMouseEnter={(e) => handlePaperEnter(e, pt)}
                   onMouseMove={handlePaperMove}
                   onMouseLeave={handlePaperLeave}
+                  onClick={() => handlePaperClick(pt)}
                 />
               );
             })}
@@ -602,7 +833,7 @@ export default function ResearchMapResultsSection({ backendResult }: { backendRe
           </svg>
 
           {/* Hover gap detail panel */}
-          {activeGap && (
+          {!selectedGapObj && activeGap && (
             <div className="absolute top-3 right-3 w-64 bg-white rounded-lg border border-gray-100 p-3.5 shadow-sm">
               <div className="flex items-center gap-2 mb-2">
                 <div className="w-2 h-2 rounded-full bg-rose-500" />
@@ -638,6 +869,76 @@ export default function ResearchMapResultsSection({ backendResult }: { backendRe
                 {activeGap.explanation.slice(0, 140)}
                 {activeGap.explanation.length > 140 ? '…' : ''}
               </p>
+            </div>
+          )}
+
+          {(selectedPoint || selectedGapObj) && (
+            <div className="absolute top-3 right-3 w-72 bg-white rounded-lg border border-gray-100 p-4 shadow-sm z-10">
+              <div className="flex items-start justify-between gap-3 mb-3">
+                <div>
+                  <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500 font-semibold">
+                    {selectedPoint ? 'Selected paper' : 'Selected gap'}
+                  </p>
+                  <p className="text-sm font-semibold text-slate-900 mt-1">
+                    {selectedPoint ? selectedPoint.title : `${selectedGapObj?.topicAName} ↔ ${selectedGapObj?.topicBName}`}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedPoint(null);
+                    setSelectedGap(null);
+                  }}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                  title="Close details"
+                >
+                  <i className="ri-close-line text-lg" />
+                </button>
+              </div>
+              {selectedPoint && (
+                <div className="space-y-2 text-[11px] text-slate-600">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex h-2.5 w-2.5 rounded-full" style={{ backgroundColor: selectedPoint.color }} />
+                    <span>{selectedPoint.topicName}</span>
+                  </div>
+                  <div className="text-slate-400">Year {selectedPoint.year}</div>
+                  <div className="text-slate-500 leading-relaxed">
+                    Click another dot to inspect a different paper, or click this dot again to close details.
+                  </div>
+                </div>
+              )}
+              {selectedGapObj && (
+                <div className="space-y-2 text-[11px] text-slate-600">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="text-[10px] font-medium px-2 py-0.5 rounded"
+                      style={{
+                        backgroundColor: topicLabels.find((t) => t.id === selectedGapObj.topicAId)?.color + '18',
+                        color: topicLabels.find((t) => t.id === selectedGapObj.topicAId)?.color,
+                      }}
+                    >
+                      {selectedGapObj.topicAName}
+                    </span>
+                    <span className="text-[10px] text-slate-400">↔</span>
+                    <span
+                      className="text-[10px] font-medium px-2 py-0.5 rounded"
+                      style={{
+                        backgroundColor: topicLabels.find((t) => t.id === selectedGapObj.topicBId)?.color + '18',
+                        color: topicLabels.find((t) => t.id === selectedGapObj.topicBId)?.color,
+                      }}
+                    >
+                      {selectedGapObj.topicBName}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 text-slate-400 text-[10px]">
+                    <span>Score {selectedGapObj.gapScore.toFixed(2)}</span>
+                    {selectedGapObj.severity && <span>· {selectedGapObj.severity}</span>}
+                  </div>
+                  <p className="text-slate-500 leading-relaxed">
+                    {selectedGapObj.explanation}
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </div>

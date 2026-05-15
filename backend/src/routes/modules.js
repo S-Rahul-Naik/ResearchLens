@@ -7,12 +7,13 @@ const { runModule1Summarization } = require('../services/module1Summarization');
 const { runModule2TopicModeling, runModule2TopicModelingWithLLM } = require('../services/module2TopicModeling');
 const { runModule3GapDetection, runModule3GapDetectionWithLLM } = require('../services/module3GapDetection');
 const { runModule4TrendDetection, runModule4TrendDetectionWithLLM } = require('../services/module4TrendDetection');
-const { runModule5Visualization } = require('../services/module5Visualization');
+const { runModule5Visualization, runModule5VisualizationWithOllama } = require('../services/module5Visualization');
 const { runModule6Chatbot } = require('../services/module6Chatbot');
 const { runModule7ContradictionDetection } = require('../services/module7ContradictionDetection');
 const { runModule8DatasetMethodMatrix } = require('../services/module8DatasetMethodMatrix');
 const { runModule9RelatedWorkDraft } = require('../services/module9RelatedWorkDraft');
 const { runModule10ScientificHonesty } = require('../services/module10ScientificHonesty');
+const { askAboutAnalysis } = require('../services/chatbotBridge');
 const { buildReportContext, generateAnalysisReport } = require('../services/ollamaBridge');
 const { callN8NFullAnalysis, formatN8NResults, checkN8NHealth, N8N_BASE_URL } = require('../services/n8nBridge');
 const Ajv = require('ajv');
@@ -1071,7 +1072,8 @@ Keep it compact. Always include the arrays, even if they are short.`;
           .map(([year, count]) => ({ year, count }));
         return {
           topicId: trend.id,
-          topicName: trend.name,
+          topic: trend.topic || trend.topicName || trend.name || topics[index]?.name || `Topic ${index + 1}`,
+          topicName: trend.topicName || trend.name || trend.topic || topics[index]?.name || `Topic ${index + 1}`,
           yearlyCounts,
           slope: trend.direction === 'rising' ? 0.7 : trend.direction === 'declining' ? -0.4 : 0,
           trend: normalizeTrendDirection(trend.direction),
@@ -1508,6 +1510,54 @@ router.post('/modules/n8n-webhook', async (req, res) => {
   } catch (error) {
     console.error('[N8N Webhook] Error:', error);
     res.status(500).json({ error: error.message, stack: process.env.NODE_ENV === 'development' ? error.stack : undefined });
+  }
+});
+
+/**
+ * POST /api/chat/ask-about-analysis
+ * Real-time chatbot using n8n analysis payload as RAG context
+ * Request body: { question: string, backendResult: RunAllResult }
+ */
+router.post('/chat/ask-about-analysis', async (req, res) => {
+  try {
+    const { question, backendResult } = req.body;
+
+    if (!question || !question.trim()) {
+      return res.status(400).json({ error: 'Question is required' });
+    }
+
+    if (!backendResult) {
+      return res.status(400).json({ error: 'Analysis payload (backendResult) is required' });
+    }
+
+    const result = await askAboutAnalysis(question.trim(), backendResult);
+    res.json(result);
+  } catch (error) {
+    console.error('[Chat] Error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/visualization/regenerate-with-ollama
+ * Regenerate the research map with Ollama-enhanced force-directed layout
+ * Request body: { papers: BackendPaper[], topics: TopicResult[], gaps: GapResult[] }
+ */
+router.post('/visualization/regenerate-with-ollama', async (req, res) => {
+  try {
+    const papers = pickPapers(req.body?.papers, getPapers());
+    const topics = Array.isArray(req.body?.topics) && req.body.topics.length > 0
+      ? req.body.topics
+      : runModule2TopicModeling(papers).topics;
+    const gaps = Array.isArray(req.body?.gaps) && req.body.gaps.length > 0
+      ? req.body.gaps
+      : runModule3GapDetection(papers, topics).gaps;
+
+    const result = await runModule5VisualizationWithOllama(papers, topics, gaps);
+    res.json(result);
+  } catch (error) {
+    console.error('[Visualization] Error:', error.message);
+    res.status(500).json({ error: error.message });
   }
 });
 

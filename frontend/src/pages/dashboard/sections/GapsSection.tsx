@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import type { ResearchGap } from '../../../mocks/gaps';
 import GapCard from './gaps/GapCard';
-import GapDetailPanel from './gaps/GapDetailPanel';
+import EvidenceModal from './gaps/EvidenceModal';
 import GapCompareModal from './gaps/GapCompareModal';
 import { logExport } from '../../../hooks/useExportHistory';
 import type { RunAllResult, BackendPaper } from '../../../lib/api';
@@ -216,10 +216,7 @@ export default function GapsSection({ backendResult, papers: propPapers = [] }: 
       )}
 
       {!selectMode && selectedIndex !== null && sorted[selectedIndex] && (
-        <>
-          <div className="fixed inset-0 bg-black/30 z-40" onClick={() => setSelectedIndex(null)} />
-          <GapDetailPanel gap={sorted[selectedIndex]} papers={paperList} currentIndex={selectedIndex} totalCount={sorted.length} onNavigate={navigate} onClose={() => setSelectedIndex(null)} />
-        </>
+        <EvidenceModal gap={sorted[selectedIndex]} papers={paperList} currentIndex={selectedIndex} totalCount={sorted.length} onNavigate={navigate} onClose={() => setSelectedIndex(null)} />
       )}
     </div>
   );

@@ -124,8 +124,7 @@ function generatePrintHTML(papers: Paper[], processedCount: number, avgGapScore:
   <div class="meta">Generated ${new Date().toLocaleString()} · ResearchLens v1.0</div>
 
     <div class="stats">
-    <div class="stat"><div class="val">${papers.length}</div><div class="lbl">Total Papers</div></div>
-    <div class="stat"><div class="val">${processedCount}</div><div class="lbl">Processed</div></div>
+    <div class="stat"><div class="val">${processedCount}</div><div class="lbl">Total Papers</div></div>
     <div class="stat"><div class="val">${topics.length}</div><div class="lbl">Topics</div></div>
     <div class="stat"><div class="val">${gaps.length}</div><div class="lbl">Gaps Detected</div></div>
     <div class="stat"><div class="val">${avgGapScore}</div><div class="lbl">Avg Gap Score</div></div>
@@ -203,6 +202,7 @@ export default function DatasetsSection({ onShowResults }: DatasetsSectionProps)
   const [selectedPaper, setSelectedPaper] = useState<Paper | null>(null);
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
   const [showPipeline, setShowPipeline] = useState(false);
+  const [processingPaperIds, setProcessingPaperIds] = useState<Set<string>>(new Set());
   const [selectedAnalysisType, setSelectedAnalysisType] = useState<'quick' | 'full' | 'n8n'>('n8n');
   const [latestRunData, setLatestRunData] = useState<(Omit<AnalysisRun, 'id' | 'timestamp'>) | null>(null);
   const [runName, setRunName] = useState('');
@@ -403,7 +403,17 @@ export default function DatasetsSection({ onShowResults }: DatasetsSectionProps)
 
   const handleProcess = async () => {
     setUploadMessage(null);
-    const ok = await syncCorpusToBackend(papers);
+    
+    // Check if papers are selected
+    if (selected.size === 0) {
+      setUploadMessage('Please select papers to process.');
+      return;
+    }
+
+    // Process only selected papers
+    const selectedPapers = papers.filter(p => selected.has(p.id));
+    setProcessingPaperIds(new Set(selected));
+    const ok = await syncCorpusToBackend(selectedPapers);
     if (!ok) return;
     // Skip dialog - directly use N8N analysis
     setSelectedAnalysisType('n8n' as any);
@@ -426,24 +436,32 @@ export default function DatasetsSection({ onShowResults }: DatasetsSectionProps)
       const existing = paperTopicMap.get(paperId) ?? [];
       paperTopicMap.set(paperId, [...existing, topicId]);
     });
-    const processed = papers.map(p => ({
-      ...p,
-      status: 'processed' as Paper['status'],
-      topics: paperTopicMap.get(p.id) ?? p.topics,
-    }));
+    // Only update papers that were selected for processing
+    const processed = papers.map(p => {
+      if (processingPaperIds.has(p.id)) {
+        return {
+          ...p,
+          status: 'processed' as Paper['status'],
+          topics: paperTopicMap.get(p.id) ?? p.topics,
+        };
+      }
+      return p;
+    });
     setProcessedTopics(topics);
     setProcessedGaps(gaps);
     setPapers(processed);
     setProcessDone(true);
     setShowResults(true);
+    setSelected(new Set());
 
-    // Build run data from the backend result only
+    // Build run data from the backend result only using selected papers
+    const selectedPapersOnly = processed.filter(p => processingPaperIds.has(p.id));
     const topTopics = topics.slice(0, 3).map(t => t.name);
     const topGap = gaps.length
       ? `${gaps[0].topicALabel} ↔ ${gaps[0].topicBLabel}`
       : 'No gaps detected';
 
-    const years = papers.map(p => p.year);
+    const years = selectedPapersOnly.map(p => p.year);
     const yearRange = years.length
       ? { start: Math.min(...years), end: Math.max(...years) }
       : { start: new Date().getFullYear(), end: new Date().getFullYear() };
@@ -456,7 +474,7 @@ export default function DatasetsSection({ onShowResults }: DatasetsSectionProps)
       ? Math.max(0, Date.now() - new Date(backendResult.createdAt).getTime())
       : 0;
 
-    const paperList: BackendPaper[] = papers.map(p => ({
+    const paperList: BackendPaper[] = selectedPapersOnly.map(p => ({
       id: p.id,
       title: p.title,
       authors: Array.isArray(p.authors) ? p.authors : [],
@@ -465,7 +483,7 @@ export default function DatasetsSection({ onShowResults }: DatasetsSectionProps)
     }));
     const runData: Omit<AnalysisRun, 'id' | 'timestamp'> = {
       name: runName.trim() || `Analysis Run — ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`,
-      papers: papers.length,
+      papers: selectedPapersOnly.length,
       topics: topics.length,
       gaps: gaps.length,
       yearRange,
@@ -478,7 +496,7 @@ export default function DatasetsSection({ onShowResults }: DatasetsSectionProps)
     };
     if (onShowResults) onShowResults(runData);
     setLatestRunData(runData);
-  }, [papers, runName, onShowResults]);
+  }, [papers, runName, onShowResults, processingPaperIds]);
 
   const handlePipelineCancel = useCallback(() => {
     setShowPipeline(false);
@@ -555,7 +573,8 @@ export default function DatasetsSection({ onShowResults }: DatasetsSectionProps)
 
   // Download handlers
   const handleDownloadJSON = () => {
-    const data = buildReportData(papers, processedCount, avgGapScore, processedTopics, processedGaps, getTopicName);
+    const processedPapers = papers.filter(p => processingPaperIds.has(p.id));
+    const data = buildReportData(processedPapers, processedCount, avgGapScore, processedTopics, processedGaps, getTopicName);
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -568,7 +587,8 @@ export default function DatasetsSection({ onShowResults }: DatasetsSectionProps)
   };
 
   const handleDownloadPDF = () => {
-    const rawHtml = generatePrintHTML(papers, processedCount, avgGapScore, processedTopics, processedGaps, getTopicName);
+    const processedPapers = papers.filter(p => processingPaperIds.has(p.id));
+    const rawHtml = generatePrintHTML(processedPapers, processedCount, avgGapScore, processedTopics, processedGaps, getTopicName);
     // Inject auto-print script into <head> so it fires after the page loads from blob URL
     const html = rawHtml.replace('</head>', '<script>window.onload=function(){window.print()}<\/script></head>');
     const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
@@ -638,10 +658,10 @@ export default function DatasetsSection({ onShowResults }: DatasetsSectionProps)
 
       <div className="flex items-center justify-between bg-white rounded-2xl border border-gray-100 px-6 py-4">
         <div>
-          <div className="text-sm font-semibold text-gray-800">{papers.length} papers in dataset</div>
+          <div className="text-sm font-semibold text-gray-800">{selected.size} papers in dataset</div>
           <div className="text-xs text-gray-400 mt-0.5">
-            {papers.filter((p) => p.status === 'processed').length} processed ·{' '}
-            {papers.filter((p) => p.status === 'pending').length} pending
+            {Array.from(selected).map(id => papers.find(p => p.id === id)).filter(p => p?.status === 'processed').length} processed ·{' '}
+            {Array.from(selected).map(id => papers.find(p => p.id === id)).filter(p => p?.status === 'pending').length} pending
           </div>
         </div>
         <div className="flex items-center gap-3 flex-wrap justify-end">
@@ -817,54 +837,61 @@ export default function DatasetsSection({ onShowResults }: DatasetsSectionProps)
       )}
 
       {/* Papers Table */}
-      <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-        {/* Table Header + Filters */}
-        <div className="px-6 py-4 border-b border-gray-100 space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-gray-900">
-              Uploaded Papers
-              {hasActiveFilter && (
-                <span className="ml-2 text-xs font-normal text-teal-600">
-                  {filteredPapers.length} of {papers.length} shown
-                </span>
-              )}
-            </h3>
-            <div className="flex items-center gap-2">
-              {hasActiveFilter && (
-                <button
-                  onClick={() => { setSearchQuery(''); setFilterYear('all'); setFilterStatus('all'); }}
-                  className="whitespace-nowrap text-xs text-gray-400 hover:text-gray-600 transition-colors cursor-pointer flex items-center gap-1"
-                >
-                  <i className="ri-refresh-line" /> Reset
-                </button>
-              )}
-              {selected.size > 0 && (
-                <div className="flex items-center gap-2">
-                  {/* Bulk Export dropdown */}
-                  <div className="relative" ref={bulkMenuRef}>
-                    <button onClick={() => setBulkMenuOpen(v => !v)} className="whitespace-nowrap flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-teal-50 text-teal-700 border border-teal-200 rounded-lg hover:bg-teal-100 transition-colors cursor-pointer">
-                      <i className="ri-download-2-line" />
-                      Export {selected.size} selected
-                      <i className={`ri-arrow-down-s-line transition-transform ${bulkMenuOpen ? 'rotate-180' : ''}`} />
-                    </button>
-                    {bulkMenuOpen && (
-                      <div className="absolute right-0 top-full mt-1.5 z-20 w-44 bg-white rounded-xl border border-gray-100 py-1" style={{ boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>
-                        <button onClick={() => { bulkExportJSON(selectedPapersList, getTopicName); setBulkMenuOpen(false); }} className="whitespace-nowrap w-full flex items-center gap-2.5 px-3.5 py-2 text-xs text-gray-700 hover:bg-gray-50 cursor-pointer">
-                          <i className="ri-braces-line text-amber-500" /> Export as JSON
-                        </button>
-                        <button onClick={() => { bulkExportCSV(selectedPapersList, getTopicName); setBulkMenuOpen(false); }} className="whitespace-nowrap w-full flex items-center gap-2.5 px-3.5 py-2 text-xs text-gray-700 hover:bg-gray-50 cursor-pointer">
-                          <i className="ri-table-line text-teal-500" /> Export as CSV
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                  <button onClick={handleDeletePapers} className="whitespace-nowrap text-xs text-rose-500 hover:underline cursor-pointer">
-                    Delete {selected.size}
+      {papers.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
+          <i className="ri-file-upload-line text-4xl text-gray-300 mb-4 block" />
+          <p className="text-lg font-semibold text-gray-600 mb-2">No papers uploaded yet</p>
+          <p className="text-sm text-gray-400 mb-6">Upload research papers above to get started</p>
+        </div>
+      ) : (
+        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+          {/* Table Header + Filters */}
+          <div className="px-6 py-4 border-b border-gray-100 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-gray-900">
+                Select below papers to process
+                {hasActiveFilter && (
+                  <span className="ml-2 text-xs font-normal text-teal-600">
+                    {filteredPapers.length} of {papers.length} shown
+                  </span>
+                )}
+              </h3>
+              <div className="flex items-center gap-2">
+                {hasActiveFilter && (
+                  <button
+                    onClick={() => { setSearchQuery(''); setFilterYear('all'); setFilterStatus('all'); }}
+                    className="whitespace-nowrap text-xs text-gray-400 hover:text-gray-600 transition-colors cursor-pointer flex items-center gap-1"
+                  >
+                    <i className="ri-refresh-line" /> Reset
                   </button>
-                </div>
-              )}
+                )}
+                {selected.size > 0 && (
+                  <div className="flex items-center gap-2">
+                    {/* Bulk Export dropdown */}
+                    <div className="relative" ref={bulkMenuRef}>
+                      <button onClick={() => setBulkMenuOpen(v => !v)} className="whitespace-nowrap flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-teal-50 text-teal-700 border border-teal-200 rounded-lg hover:bg-teal-100 transition-colors cursor-pointer">
+                        <i className="ri-download-2-line" />
+                        Export {selected.size} selected
+                        <i className={`ri-arrow-down-s-line transition-transform ${bulkMenuOpen ? 'rotate-180' : ''}`} />
+                      </button>
+                      {bulkMenuOpen && (
+                        <div className="absolute right-0 top-full mt-1.5 z-20 w-44 bg-white rounded-xl border border-gray-100 py-1" style={{ boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>
+                          <button onClick={() => { bulkExportJSON(selectedPapersList, getTopicName); setBulkMenuOpen(false); }} className="whitespace-nowrap w-full flex items-center gap-2.5 px-3.5 py-2 text-xs text-gray-700 hover:bg-gray-50 cursor-pointer">
+                            <i className="ri-braces-line text-amber-500" /> Export as JSON
+                          </button>
+                          <button onClick={() => { bulkExportCSV(selectedPapersList, getTopicName); setBulkMenuOpen(false); }} className="whitespace-nowrap w-full flex items-center gap-2.5 px-3.5 py-2 text-xs text-gray-700 hover:bg-gray-50 cursor-pointer">
+                            <i className="ri-table-line text-teal-500" /> Export as CSV
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    <button onClick={handleDeletePapers} className="whitespace-nowrap text-xs text-rose-500 hover:underline cursor-pointer">
+                      Delete {selected.size}
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
 
           {/* Filter Row */}
           <div className="flex flex-col sm:flex-row gap-2">
@@ -1024,7 +1051,8 @@ export default function DatasetsSection({ onShowResults }: DatasetsSectionProps)
             <span className="text-xs text-gray-400">{filteredPapers.length} result{filteredPapers.length !== 1 ? 's' : ''}</span>
           </div>
         )}
-      </div>
+        </div>
+      )}
 
       {/* Paper Detail Modal */}
       <PaperDetailModal
@@ -1037,7 +1065,7 @@ export default function DatasetsSection({ onShowResults }: DatasetsSectionProps)
       {/* Processing Pipeline Modal */}
       {showPipeline && (
         <ProcessingPipeline
-          papers={papers}
+          papers={papers.filter(p => processingPaperIds.has(p.id))}
           runName={runName.trim() || undefined}
           analysisType={selectedAnalysisType}
           onComplete={handlePipelineComplete}

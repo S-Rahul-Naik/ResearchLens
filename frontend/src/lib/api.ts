@@ -286,6 +286,131 @@ function unwrapSingleItemArray<T>(value: T | T[]): T | T[] {
 export function normalizeRunAllResult(raw: unknown): RunAllResult {
   const value = unwrapSingleItemArray(raw as RunAllResult | RunAllResult[] | null | undefined) as any;
   const modules = value?.modules ?? value ?? {};
+  const module2Topics = Array.isArray(modules?.module2?.topics) ? modules.module2.topics : [];
+  const normalizedTopics = module2Topics.map((topic: any, index: number) => ({
+    ...topic,
+    topicId: String(topic.topicId || topic.id || topic.name || `topic_${index + 1}`),
+    name: topic.name || topic.topicName || `Topic ${index + 1}`,
+  }));
+  const topicNameById = new Map(normalizedTopics.map((topic: any) => [String(topic.topicId), topic.name]));
+  const topicIdByName = new Map(normalizedTopics.map((topic: any) => [String(topic.name).toLowerCase(), topic.topicId]));
+  const topicIdByPaperId = new Map<string, string>();
+  normalizedTopics.forEach((topic: any) => {
+    (Array.isArray(topic.paperIds) ? topic.paperIds : []).forEach((paperId: string) => {
+      topicIdByPaperId.set(String(paperId), topic.topicId);
+    });
+  });
+  const normalizeTrendEntry = (trend: any, index: number) => {
+    if (!trend || typeof trend !== 'object') return trend;
+    const topicId = String(trend.topicId || trend.id || `topic_${index + 1}`);
+    const topicName = trend.topicName || trend.topic || trend.name || topicNameById.get(topicId) || topicNameById.get(topicId.replace(/^topic[-_]?/, 'topic_')) || `Topic ${index + 1}`;
+    return {
+      ...trend,
+      topicId,
+      topic: trend.topic || topicName,
+      topicName,
+    };
+  };
+  const normalizeMapPoint = (point: any, index: number) => {
+    if (!point || typeof point !== 'object') return point;
+    const topicId = String(
+      point.topicId ||
+      topicIdByPaperId.get(String(point.paperId)) ||
+      topicIdByName.get(String(point.topicName || '').toLowerCase()) ||
+      point.topicName ||
+      `topic_${index + 1}`
+    );
+    return {
+      ...point,
+      topicId,
+      topicName: point.topicName || topicNameById.get(topicId) || point.topicName || topicId,
+    };
+  };
+  const normalizeTopicCenter = (center: any, index: number) => {
+    if (!center || typeof center !== 'object') return center;
+    const topicId = String(
+      center.topicId ||
+      topicIdByName.get(String(center.name || center.topicName || '').toLowerCase()) ||
+      center.name ||
+      `topic_${index + 1}`
+    );
+    return {
+      ...center,
+      topicId,
+      name: center.name || topicNameById.get(topicId) || center.topicName || topicId,
+    };
+  };
+
+  const hashCode = (input: string) => {
+    let hash = 0;
+    for (let i = 0; i < input.length; i += 1) {
+      hash = ((hash << 5) - hash) + input.charCodeAt(i);
+      hash |= 0;
+    }
+    return Math.abs(hash);
+  };
+
+  const summariesByPaperId = new Map<string, string>();
+  if (Array.isArray(modules?.module1?.summaries)) {
+    modules.module1.summaries.forEach((summary: any) => {
+      if (!summary) return;
+      const paperId = String(summary.paperId || summary.id || '');
+      const title = String(summary.title || summary.paper?.title || '').trim();
+      if (paperId) summariesByPaperId.set(paperId, title || `Paper ${paperId}`);
+    });
+  }
+
+  const generatedTopicCenters = normalizedTopics.map((topic: any, index: number) => {
+    const total = Math.max(1, normalizedTopics.length);
+    const theta = (2 * Math.PI * index) / total;
+    return {
+      topicId: topic.topicId,
+      name: topic.name,
+      x: Math.cos(theta) * 0.7,
+      y: Math.sin(theta) * 0.7,
+    };
+  });
+
+  const centerByTopicId = new Map(generatedTopicCenters.map((center) => [String(center.topicId), center]));
+  const generatedPoints = normalizedTopics.flatMap((topic: any, topicIndex: number) => {
+    const paperIds: string[] = Array.isArray(topic.paperIds) ? topic.paperIds.map((id: unknown) => String(id)) : [];
+    const baseCenter = centerByTopicId.get(String(topic.topicId)) || generatedTopicCenters[topicIndex] || { x: 0, y: 0 };
+    const total = Math.max(1, paperIds.length);
+    return paperIds.map((paperId: string, index: number) => {
+      const seed = hashCode(`${topic.topicId}-${paperId}`);
+      const angle = ((2 * Math.PI * index) / total) + ((seed % 360) * Math.PI / 1800);
+      const radius = 0.14 + ((seed % 40) / 1000) + ((index % 3) * 0.02);
+      return {
+        paperId,
+        title: summariesByPaperId.get(paperId) || `Paper ${paperId}`,
+        topicId: String(topic.topicId),
+        topicName: topic.name,
+        x: baseCenter.x + (Math.cos(angle) * radius),
+        y: baseCenter.y + (Math.sin(angle) * radius),
+        keywords: [],
+      };
+    });
+  });
+
+  const generatedLinks = Array.isArray(modules?.module3?.gaps)
+    ? modules.module3.gaps.map((gap: any) => ({
+        sourceTopicId: String(gap.topicA || ''),
+        targetTopicId: String(gap.topicB || ''),
+        gapScore: Number(gap.gapScore || 0),
+        severity: gap.severity || 'moderate',
+        reliability: typeof gap.reliability === 'number' ? gap.reliability : undefined,
+        coOccurrence: typeof gap.coOccurrence === 'number' ? gap.coOccurrence : undefined,
+        explanation: gap.explanation || gap.recommendation,
+      })).filter((link: any) => link.sourceTopicId && link.targetTopicId)
+    : [];
+
+  const rawMap = modules?.module5?.map ?? {};
+  const rawPoints = Array.isArray(rawMap?.points) ? rawMap.points : [];
+  const rawCenters = Array.isArray(rawMap?.topicCenters) ? rawMap.topicCenters : [];
+  const rawLinks = Array.isArray(rawMap?.links) ? rawMap.links : [];
+  const effectivePoints = rawPoints.length > 0 ? rawPoints : generatedPoints;
+  const effectiveCenters = rawCenters.length > 0 ? rawCenters : generatedTopicCenters;
+  const effectiveLinks = rawLinks.length > 0 ? rawLinks : generatedLinks;
 
   return {
     id: value?.id ?? `run_${Date.now()}`,
@@ -297,8 +422,23 @@ export function normalizeRunAllResult(raw: unknown): RunAllResult {
       module1: modules.module1 ?? { module: 'module1-summarization', count: 0, summaries: [] },
       module2: modules.module2 ?? { module: 'module2-topic-modeling', topics: [], assignments: [] },
       module3: modules.module3 ?? { module: 'module3-gap-detection', formula: '', gaps: [] },
-      module4: modules.module4 ?? { module: 'module4-trend-detection', trends: [] },
-      module5: modules.module5 ?? { module: 'module5-visualization', map: { points: [], topicCenters: [], links: [] } },
+      module4: {
+        ...(modules.module4 ?? { module: 'module4-trend-detection', trends: [] }),
+        trends: Array.isArray(modules?.module4?.trends)
+          ? modules.module4.trends.map((trend: any, index: number) => normalizeTrendEntry(trend, index))
+          : Array.isArray(modules?.module4?.module4_trends)
+            ? modules.module4.module4_trends.map((trend: any, index: number) => normalizeTrendEntry(trend, index))
+            : [],
+      },
+      module5: {
+        ...(modules.module5 ?? { module: 'module5-visualization', map: { points: [], topicCenters: [], links: [] } }),
+        map: {
+          ...(modules?.module5?.map ?? { points: [], topicCenters: [], links: [] }),
+          points: effectivePoints.map((point: any, index: number) => normalizeMapPoint(point, index)),
+          topicCenters: effectiveCenters.map((center: any, index: number) => normalizeTopicCenter(center, index)),
+          links: effectiveLinks,
+        },
+      },
       module6: modules.module6 ?? { module: 'module6-chatbot', answer: '', citations: [] },
       module7: modules.module7 ?? { module: 'module7-contradiction-detection', contradictions: [] },
       module8: modules.module8 ?? { module: 'module8-dataset-method-matrix', datasets: [], methods: [], rows: [], matrix: [] },
@@ -504,6 +644,42 @@ export async function apiGetAnalysisReport(reportId: string): Promise<RunAllResu
 
 export async function askChatbot(papers: BackendPaper[], question: string): Promise<ChatbotResult> {
   return post<ChatbotResult>('/api/modules/6-chatbot', { papers, question });
+}
+
+/**
+ * Ask a question about the analysis using n8n payload as RAG context
+ * Much faster and more accurate than paper-based RAG
+ */
+export async function askAboutAnalysis(question: string, backendResult: RunAllResult | null): Promise<ChatbotResult> {
+  if (!backendResult) {
+    throw new Error('Analysis result is required');
+  }
+  return post<ChatbotResult>('/api/chat/ask-about-analysis', { question, backendResult });
+}
+
+/**
+ * Regenerate the research map with Ollama-enhanced force-directed layout
+ * Similar to Connected Papers visualization
+ */
+export async function regenerateVisualizationWithOllama(backendResult: RunAllResult | null): Promise<RunAllResult> {
+  if (!backendResult?.modules?.module2?.topics || !backendResult?.modules?.module3?.gaps) {
+    throw new Error('Complete analysis data is required (topics and gaps)');
+  }
+
+  const papers = backendResult.papers || [];
+  const topics = backendResult.modules.module2.topics;
+  const gaps = backendResult.modules.module3.gaps;
+
+  const result = await post<any>('/api/visualization/regenerate-with-ollama', { papers, topics, gaps });
+
+  // Merge the new map into the backend result
+  return {
+    ...backendResult,
+    modules: {
+      ...backendResult.modules,
+      module5: result,
+    },
+  };
 }
 
 // ─── N8N Webhook Integration ──────────────────────────────────

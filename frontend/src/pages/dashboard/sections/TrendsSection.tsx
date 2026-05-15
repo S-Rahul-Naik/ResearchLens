@@ -178,6 +178,21 @@ export default function TrendsSection({ backendResult, papers: propPapers = [] }
     insufficient_data: trends.filter(t => t.trend === 'insufficient_data').length,
   };
 
+  if (!backendResult || trends.length === 0) {
+    return (
+      <div className="p-8 flex flex-col items-center justify-center h-full">
+        <div className="w-16 h-16 flex items-center justify-center rounded-2xl bg-slate-50 text-slate-400 mb-4">
+          <i className="ri-line-chart-line text-2xl" />
+        </div>
+        <h3 className="text-lg font-semibold text-gray-900 mb-1">No trend analysis yet</h3>
+        <p className="text-sm text-gray-500 mb-6 max-w-sm text-center">Run an analysis on your dataset to see publication trends, growth rates, and topic evolution over time.</p>
+        <button onClick={() => window.location.href = '/dashboard?section=datasets'} className="px-4 py-2 rounded-lg bg-teal-600 text-white text-sm font-medium hover:bg-teal-700 transition-colors cursor-pointer">
+          Upload papers
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="p-8">
       <div className="flex flex-wrap gap-2 mb-6">

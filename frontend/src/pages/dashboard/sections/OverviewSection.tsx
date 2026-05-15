@@ -49,14 +49,16 @@ export default function OverviewSection({ onNavigate, latestRun }: OverviewSecti
   const realTopics = (run as any)?.module2?.topics ?? (run as any)?.backendResult?.modules?.module2?.topics ?? [];
   const realGaps = (run as any)?.module3?.gaps ?? (run as any)?.backendResult?.modules?.module3?.gaps ?? [];
   const realPapers = (run as any)?.module1?.summaries ?? (run as any)?.backendResult?.modules?.module1?.summaries ?? (run as any)?.backendPapers ?? [];
+  // Get processed papers (backendPapers contains only papers from the latest run)
+  const processedPapers = (run as any)?.backendPapers ?? [];
 
   const topGaps = realGaps.length > 0 ? realGaps.slice(0, 3) : [];
-  const recentPapers = realPapers.length > 0 ? realPapers.slice(0, 5) : [];
+  const recentPapers = processedPapers.length > 0 ? processedPapers.slice(0, 5) : [];
 
   // Build stats from real data if available
   const stats = run
     ? [
-        { label: 'Total Papers', value: currentPaperCount, icon: 'ri-file-text-line', color: 'bg-teal-50 text-teal-700', change: 'in current dataset' },
+        { label: 'Total Papers', value: runPaperCount || 0, icon: 'ri-file-text-line', color: 'bg-teal-50 text-teal-700', change: 'analyzed in latest run' },
         { label: 'Topics Detected', value: runTopicCount || 0, icon: 'ri-price-tag-3-line', color: 'bg-amber-50 text-amber-700', change: 'BERTopic clusters' },
         { label: 'Research Gaps', value: runGapCount || 0, icon: 'ri-radar-line', color: 'bg-rose-50 text-rose-600', change: `${realGaps.filter((g) => g.gapScore > 0.5).length} high-confidence` },
         { label: 'Avg Gap Score', value: ((run as any).qualityScore || 0).toFixed(2), icon: 'ri-bar-chart-2-line', color: 'bg-violet-50 text-violet-700', change: 'Computed score' },
@@ -176,7 +178,7 @@ export default function OverviewSection({ onNavigate, latestRun }: OverviewSecti
         </div>
       )}
 
-      {run && !analysisIsStale && (
+      {run && (
         <>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-100 p-6">

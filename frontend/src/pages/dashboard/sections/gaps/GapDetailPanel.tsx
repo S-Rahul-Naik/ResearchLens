@@ -181,169 +181,39 @@ export default function GapDetailPanel({ gap, papers = [], currentIndex, totalCo
           ) : (
             <>
               {/* § 1 Metrics */}
-              <section className="px-6 pt-5 pb-4 border-b border-gray-100">
-                <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Computed Metrics</h4>
-                <div className="grid grid-cols-3 gap-3 mb-3">
-                  {[
-                    { label: 'Similarity', value: gap.similarityScore.toFixed(2), sub: 'Cosine similarity', bg: 'bg-teal-50', text: 'text-teal-700', bar: '#0d9488', pct: gap.similarityScore },
-                    { label: 'Co-occurrence', value: `${gap.coOccurrenceCount}`, sub: 'Papers bridging both', bg: 'bg-gray-50', text: 'text-gray-700', bar: '#94a3b8', pct: gap.coOccurrenceCount / 5 },
-                    { label: 'Gap Score', value: gap.gapScore.toFixed(3), sub: 'sim × 1/(co+1)', bg: 'bg-rose-50', text: 'text-rose-600', bar: '#e11d48', pct: Math.min(gap.gapScore, 1) },
-                  ].map(m => (
-                    <div key={m.label} className={`p-3 rounded-xl ${m.bg}`}>
-                      <div className={`text-xl font-bold ${m.text}`}>{m.value}</div>
-                      <div className={`text-[9px] font-semibold uppercase tracking-wide ${m.text} mt-0.5`}>{m.label}</div>
-                      <div className="h-1 bg-white/60 rounded-full overflow-hidden mt-2"><div className="h-full rounded-full" style={{ backgroundColor: m.bar, width: `${m.pct * 100}%`, transition: 'width .7s ease' }} /></div>
-                      <p className="text-[9px] text-gray-400 mt-1.5 leading-tight">{m.sub}</p>
-                    </div>
-                  ))}
-                </div>
-                <div className="bg-gray-50 rounded-lg px-3 py-2 font-mono text-xs text-gray-600">
-                  gap_score = {gap.similarityScore.toFixed(2)} × (1/({gap.coOccurrenceCount}+1)) = <strong className="text-gray-900">{gap.gapScore.toFixed(3)}</strong>
-                </div>
-              </section>
-
-              {/* § 2 Topic Details */}
-              <section className="px-6 pt-4 pb-4 border-b border-gray-100">
-                <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Topic Details</h4>
-                <div className="grid grid-cols-2 gap-3 mb-4">
-                  {[
-                    { name: gap.topicAName, kws: gap.topicAKeywords, paperCount: papersA.length, bg: 'bg-teal-50', border: 'border-teal-100', text: 'text-teal-800', badge: 'bg-teal-100 text-teal-700' },
-                    { name: gap.topicBName, kws: gap.topicBKeywords, paperCount: papersB.length, bg: 'bg-amber-50', border: 'border-amber-100', text: 'text-amber-800', badge: 'bg-amber-100 text-amber-700' },
-                  ].map(t => (
-                    <div key={t.name} className={`p-3 rounded-xl border ${t.bg} ${t.border}`}>
-                      <p className={`text-xs font-bold ${t.text} mb-2`}>{t.name}</p>
-                      <div className="flex flex-wrap gap-1 mb-2">{t.kws.map(kw => <span key={kw} className={`text-[9px] px-1.5 py-0.5 rounded-full ${t.badge}`}>{kw}</span>)}</div>
-                      <div className="flex items-center gap-2 text-[10px]">
-                        <span className="text-gray-500"><strong className="text-gray-700">{t.paperCount}</strong> papers</span>
+              <section className="px-6 pt-6 pb-6 space-y-6">
+                <div>
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      { label: 'Similarity Score', value: gap.similarityScore.toFixed(2), icon: 'ri-node-tree', color: '#0d9488', bg: 'bg-teal-50' },
+                      { label: 'Co-occurrence', value: gap.coOccurrenceCount.toString(), icon: 'ri-link', color: '#f59e0b', bg: 'bg-amber-50' },
+                      { label: 'Gap Score', value: gap.gapScore.toFixed(3), icon: 'ri-radar-line', color: '#e11d48', bg: 'bg-rose-50' },
+                    ].map(m => (
+                      <div key={m.label} className={`${m.bg} rounded-xl px-4 py-3 text-center`}>
+                        <div className="w-7 h-7 flex items-center justify-center rounded-lg bg-white mx-auto mb-2" style={{ color: m.color }}>
+                          <i className={`${m.icon} text-sm`} />
+                        </div>
+                        <div className="text-xl font-bold" style={{ color: m.color }}>{m.value}</div>
+                        <div className="text-[11px] text-gray-500">{m.label}</div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-                <div className="bg-gray-50 rounded-xl p-3.5 space-y-2.5">
-                  <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2">Research Profile</p>
-                  <ProfileBar label={gap.topicAName} count={papersA.length} max={maxProfile} color="#0d9488" />
-                  <ProfileBar label={gap.topicBName} count={papersB.length} max={maxProfile} color="#f59e0b" />
-                  <div className="h-px bg-gray-200" />
-                  <ProfileBar label="Bridging both" count={papersBridge.length} max={maxProfile} color="#8b5cf6" note="bridge" />
-                </div>
-              </section>
 
-              {/* § 3 Explanation */}
-              <section className="px-6 pt-4 pb-4 border-b border-gray-100">
-                <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Why Is This a Gap?</h4>
-                <div className="space-y-2">
-                  {[
-                    { icon: 'ri-radar-line', color: 'text-teal-600 bg-teal-50', label: 'High Semantic Similarity', value: `Cosine similarity = ${gap.similarityScore.toFixed(2)} — these topics share deeply related research concepts.` },
-                    { icon: 'ri-link-unlink', color: 'text-amber-600 bg-amber-50', label: 'Low Research Co-occurrence', value: gap.coOccurrenceCount === 0 ? 'Zero papers address both topics — this intersection is completely unexplored.' : `Only ${gap.coOccurrenceCount} paper${gap.coOccurrenceCount > 1 ? 's' : ''} bridge both — far too few given the semantic overlap.` },
-                    { icon: 'ri-bar-chart-2-line', color: 'text-rose-500 bg-rose-50', label: `Gap Score = ${gap.gapScore.toFixed(3)}`, value: `${gap.similarityScore.toFixed(2)} × 1/(${gap.coOccurrenceCount}+1). Higher = stronger unaddressed gap.` },
-                  ].map(item => (
-                    <div key={item.label} className="flex gap-3 p-3 rounded-xl border border-gray-100 bg-white">
-                      <div className={`w-7 h-7 flex items-center justify-center rounded-lg flex-shrink-0 ${item.color}`}><i className={`${item.icon} text-sm`} /></div>
-                      <div><p className="text-xs font-semibold text-gray-800 mb-0.5">{item.label}</p><p className="text-xs text-gray-500 leading-relaxed">{item.value}</p></div>
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-3 p-3 bg-teal-50 border border-teal-100 rounded-xl">
-                  <p className="text-xs text-teal-900 leading-relaxed"><i className="ri-lightbulb-line text-teal-600 mr-1.5" />{gap.explanation}</p>
+                {/* Explanation */}
+                <div className="bg-gray-50 rounded-xl p-4 border-l-4 border-teal-400">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-teal-700 mb-2">Gap Explanation</p>
+                  <p className="text-xs text-gray-700 leading-relaxed">{gap.explanation}</p>
                   {gap.llm_gap_explanation && (
-                    <p className="text-xs text-teal-800 leading-relaxed mt-2 font-semibold">{gap.llm_gap_explanation}</p>
+                    <p className="text-xs text-gray-700 leading-relaxed mt-3 font-medium">{gap.llm_gap_explanation}</p>
                   )}
                   {gap.llm_gap_significance && (
-                    <p className="text-xs text-teal-700 leading-relaxed mt-1.5 border-t border-teal-200 pt-2"><strong>Why it matters:</strong> {gap.llm_gap_significance}</p>
+                    <p className="text-xs text-gray-600 leading-relaxed mt-3 border-t border-gray-200 pt-3"><strong>Why it matters:</strong> {gap.llm_gap_significance}</p>
                   )}
                   {gap.llm_integration_opportunity && (
-                    <p className="text-xs text-teal-700 leading-relaxed mt-1.5 border-t border-teal-200 pt-2"><strong>Integration opportunity:</strong> {gap.llm_integration_opportunity}</p>
+                    <p className="text-xs text-gray-600 leading-relaxed mt-2 border-t border-gray-200 pt-3"><strong>Integration opportunity:</strong> {gap.llm_integration_opportunity}</p>
                   )}
                 </div>
-                <div className="mt-3 flex items-start gap-3">
-                  <button onClick={fetchRag} className={`whitespace-nowrap flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg ${ragLoading ? 'bg-gray-200 text-gray-700' : 'bg-teal-600 text-white hover:bg-teal-700'}`} disabled={ragLoading || papers.length === 0}>
-                    <i className="ri-brain-line" /> {ragLoading ? 'Explaining...' : 'Explain (RAG)'}
-                  </button>
-                  <div className="text-xs text-gray-500">Uses Ollama to generate an evidence-based explanation that cites paper IDs and snippets.</div>
-                </div>
-
-                {ragResult && (
-                  <div className="mt-4 p-3 rounded-lg bg-white border border-gray-100 space-y-3">
-                    <div className="text-sm font-semibold text-gray-800">AI Explanation</div>
-                    <div className="text-sm text-gray-700 leading-relaxed">{ragResult.answer}</div>
-                    {ragResult.citations && ragResult.citations.length > 0 && (
-                      <div>
-                        <div className="text-xs font-semibold text-gray-500 mb-1">Citations</div>
-                        <div className="space-y-2">
-                          {ragResult.citations.map(c => (
-                            <div key={c.paperId} className="p-2 rounded border border-gray-100 bg-gray-50">
-                              <div className="text-[11px] font-medium">{c.title} <span className="text-xs text-gray-400">({c.paperId})</span></div>
-                              {c.snippet && <div className="text-[12px] text-gray-600 mt-1">"{c.snippet}..."</div>}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {ragResult.gapEvidences && ragResult.gapEvidences.length > 0 && (
-                      <div>
-                        <div className="text-xs font-semibold text-gray-500 mb-1">Gap Evidence</div>
-                        <div className="space-y-2">
-                          {ragResult.gapEvidences.map(g => (
-                            <div key={String(g.gapId)} className="p-2 rounded border border-gray-100">
-                              <div className="text-[11px] font-medium text-gray-700">Evidence for gap {g.gapId ?? '—'}</div>
-                              <div className="mt-1 text-[12px] text-gray-600 space-y-1">
-                                {g.evidences.map(ev => (
-                                  <div key={ev.paperId}>• {ev.title} <span className="text-xs text-gray-400">({ev.paperId})</span> — <span className="italic">"{ev.snippet}..."</span></div>
-                                ))}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </section>
-
-              {/* § 4 Evidence */}
-              <section className="px-6 pt-4 pb-6 space-y-4">
-                <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Supporting Evidence</h4>
-                {papersA.length > 0 && (
-                  <div>
-                    <p className="text-xs font-semibold text-teal-700 mb-2 flex items-center gap-1.5"><i className="ri-file-list-line" />Papers in {gap.topicAName} ({papersA.length})</p>
-                    <div className="space-y-1.5">{papersA.map(id => <PaperRow key={id} id={id} accent="teal" />)}</div>
-                  </div>
-                )}
-                {papersB.length > 0 && (
-                  <div>
-                    <p className="text-xs font-semibold text-amber-700 mb-2 flex items-center gap-1.5"><i className="ri-file-list-line" />Papers in {gap.topicBName} ({papersB.length})</p>
-                    <div className="space-y-1.5">{papersB.map(id => <PaperRow key={id} id={id} accent="amber" />)}</div>
-                  </div>
-                )}
-                {papersBridge.length > 0 ? (
-                  <div>
-                    <p className="text-xs font-semibold text-violet-700 mb-2 flex items-center gap-1.5"><i className="ri-links-line" />Bridging Papers ({papersBridge.length})</p>
-                    {gap.llm_verified_bridging_papers && gap.llm_verified_bridging_papers.length > 0 ? (
-                      <div className="space-y-2">
-                        {gap.llm_verified_bridging_papers.map((paper, idx) => (
-                          <div key={idx} className="p-2.5 rounded-lg bg-violet-50 border border-violet-100">
-                            <div className="flex items-start justify-between gap-2">
-                              <p className="text-xs font-medium text-violet-900 flex-1">{paper.title || `Paper ${idx + 1}`}</p>
-                              {paper.llm_is_bridging && (
-                                <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-green-100 text-green-700 flex-shrink-0">✓ Bridges</span>
-                              )}
-                            </div>
-                            {paper.llm_bridging_evidence && (
-                              <p className="text-[10px] text-violet-700 mt-1.5 leading-relaxed">{paper.llm_bridging_evidence}</p>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="space-y-1.5">{papersBridge.map(id => <PaperRow key={id} id={id} accent="violet" />)}</div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2.5 p-3 bg-rose-50 border border-rose-100 rounded-xl">
-                    <i className="ri-error-warning-line text-rose-500 flex-shrink-0" />
-                    <p className="text-xs text-rose-700">No papers bridge both topics — confirming this as an unexplored intersection.</p>
-                  </div>
-                )}
               </section>
             </>
           )}

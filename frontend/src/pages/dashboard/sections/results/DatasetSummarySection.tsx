@@ -101,7 +101,7 @@ export default function DatasetSummarySection({ run }: { run?: AnalysisRun | nul
           <i className="ri-database-2-line text-sm" />
         </div>
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Section 1</p>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Section 2</p>
           <h2 className="text-lg font-bold text-gray-900 leading-tight">Dataset Summary</h2>
         </div>
       </div>

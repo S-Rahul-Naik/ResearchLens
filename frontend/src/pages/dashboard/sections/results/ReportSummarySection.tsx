@@ -141,7 +141,7 @@ export default function ReportSummarySection({ backendResult, visibleSummary }: 
           <i className="ri-align-left text-base" />
         </div>
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Research Report</p>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Section 1</p>
           <h2 className="text-lg font-bold text-gray-900">Analysis Summary</h2>
         </div>
       </div>

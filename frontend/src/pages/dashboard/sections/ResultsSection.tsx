@@ -255,11 +255,37 @@ function buildPrintHTML(backendResult?: RunAllResult | null): string {
   const gaps = backendResult?.modules.module3.gaps ?? [];
   const trends = backendResult?.modules.module4.trends ?? [];
 
+  const escapeHtml = (text: string) =>
+    text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+
+  const formatParagraphs = (text: string) =>
+    text
+      .split(/\r?\n\s*\r?\n/)
+      .map(paragraph => paragraph.trim())
+      .filter(Boolean)
+      .map(paragraph => `<p>${escapeHtml(paragraph)}</p>`)
+      .join('\n');
+
+  const reportText = backendResult?.analysisReport?.executive_summary?.trim()
+    || backendResult?.analysisReport?.report_markdown?.trim()
+    || summaries.map(item => item.summary.trim()).filter(Boolean).join('\n\n');
+
+  const analysisSummarySection = reportText
+    ? `<div class="section">
+  <div class="section-title">Analysis Summary</div>
+  ${formatParagraphs(reportText)}
+</div>`
+    : '';
+
   const topicsRows = topics
     .map(t => {
       const trendEntry = trends.find(tr => tr.topicId === t.topicId);
       const paperCount = t.paperIds.length;
-      return `<tr><td>${t.name}</td><td>${t.keywords.slice(0, 4).join(', ')}</td><td>${paperCount}</td><td>${(t.coherence * 100).toFixed(0)}%</td><td>${trendEntry?.trend ?? 'stable'}</td></tr>`;
+      return `<tr><td>${escapeHtml(t.name)}</td><td>${escapeHtml(t.keywords.slice(0, 4).join(', '))}</td><td>${paperCount}</td><td>${(t.coherence * 100).toFixed(0)}%</td><td>${escapeHtml(trendEntry?.trend ?? 'stable')}</td></tr>`;
     })
     .join('');
 
@@ -335,6 +361,8 @@ function buildPrintHTML(backendResult?: RunAllResult | null): string {
   <div class="stat-card"><div class="val">${(qualityScore * 100).toFixed(0)}%</div><div class="lbl">Model Quality</div></div>
 </div>
 
+${analysisSummarySection}
+
 <div class="section">
   <div class="section-title">Model Quality Metrics</div>
   <div class="quality-row">
@@ -376,11 +404,59 @@ function buildPrintHTML(backendResult?: RunAllResult | null): string {
 </html>`;
 }
 
+function buildTrendSectionMarkdown(backendResult?: RunAllResult | null): string {
+  const trends = backendResult?.modules?.module4?.module4_trends ?? backendResult?.modules?.module4?.trends ?? [];
+  if (!Array.isArray(trends) || trends.length === 0) return '';
+
+  const getLabel = (trend: any) => trend?.topic || trend?.topicName || trend?.name || 'Unknown';
+  const rising = trends.filter((trend: any) => trend?.trend === 'rising');
+  const declining = trends.filter((trend: any) => trend?.trend === 'declining');
+
+  const lines: string[] = ['## 4. Research Trends', ''];
+
+  if (rising.length > 0) {
+    lines.push(`### Rising Topics (${rising.length})`);
+    lines.push('');
+    rising.forEach((trend: any) => {
+      lines.push(`- **${getLabel(trend)}**`);
+      if (trend?.description) lines.push(`  ${trend.description}`);
+    });
+    lines.push('');
+  }
+
+  if (declining.length > 0) {
+    lines.push(`### Declining Topics (${declining.length})`);
+    lines.push('');
+    declining.forEach((trend: any) => {
+      lines.push(`- **${getLabel(trend)}**`);
+      if (trend?.description) lines.push(`  ${trend.description}`);
+    });
+    lines.push('');
+  }
+
+  return lines.join('\n').trim();
+}
+
+function injectTrendSection(markdown: string, backendResult?: RunAllResult | null): string {
+  const trendSection = buildTrendSectionMarkdown(backendResult);
+  if (!trendSection) return markdown;
+
+  const hasRealTrendItems = /###\s+(Rising Topics|Declining Topics)[\s\S]*?-\s+\*\*/i.test(markdown);
+  if (hasRealTrendItems) return markdown;
+
+  const trendHeadingPattern = /(##\s*4\.\s*Research Trends\s*)([\s\S]*?)(?=\n##\s*6\.\s*Scientific Integrity Assessment|\n---|$)/i;
+  if (trendHeadingPattern.test(markdown)) {
+    return markdown.replace(trendHeadingPattern, `${trendSection}\n\n`);
+  }
+
+  return `${markdown.trim()}\n\n${trendSection}`.trim();
+}
+
 // ── Share Report helpers ──────────────────────────────────────────────────────
 function buildTextSummary(backendResult?: RunAllResult | null): string {
   const generatedReport = backendResult?.analysisReport?.report_markdown?.trim();
   if (generatedReport) {
-    return generatedReport;
+    return injectTrendSection(generatedReport, backendResult);
   }
 
   const executiveSummary = backendResult?.analysisReport?.executive_summary?.trim();
@@ -441,96 +517,23 @@ function buildTextSummary(backendResult?: RunAllResult | null): string {
   ].join('\n');
 }
 
-function generateShareId(): string {
-  return Math.random().toString(36).slice(2, 10).toUpperCase();
-}
-
-function ShareDropdown({ backendResult, onClose }: { backendResult?: RunAllResult | null; onClose: () => void }) {
-  const [textCopied, setTextCopied] = useState(false);
-  const [linkCopied, setLinkCopied] = useState(false);
-  const [shareId] = useState(() => generateShareId());
-  const shareUrl = `https://researchlens.app/report/${shareId}`;
-
-  const copyText = async () => {
-    await navigator.clipboard.writeText(buildTextSummary(backendResult));
-    setTextCopied(true);
-    setTimeout(() => { setTextCopied(false); onClose(); }, 1800);
-  };
-
-  const copyLink = async () => {
-    await navigator.clipboard.writeText(shareUrl);
-    setLinkCopied(true);
-    setTimeout(() => { setLinkCopied(false); onClose(); }, 1800);
-  };
-
-  return (
-    <div className="absolute top-full right-0 mt-1.5 z-50 w-72 bg-white rounded-xl border border-gray-100 py-2 overflow-hidden" style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.10)' }}>
-      <div className="px-4 py-2 border-b border-gray-50 mb-1">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Share Analysis Report</p>
-      </div>
-
-      {/* Copy text summary */}
-      <button
-        onClick={copyText}
-        className="whitespace-nowrap w-full flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors cursor-pointer text-left"
-      >
-        <div className={`w-8 h-8 flex items-center justify-center rounded-lg flex-shrink-0 mt-0.5 ${textCopied ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-100 text-gray-500'}`}>
-          <i className={`${textCopied ? 'ri-check-line' : 'ri-file-copy-line'} text-sm`} />
-        </div>
-        <div>
-          <p className="text-xs font-semibold text-gray-800">{textCopied ? 'Copied to clipboard!' : 'Copy Text Summary'}</p>
-          <p className="text-[10px] text-gray-400 mt-0.5">Formatted key findings — paste into Slack, email, or docs</p>
-        </div>
-      </button>
-
-      {/* Copy share link */}
-      <button
-        onClick={copyLink}
-        className="whitespace-nowrap w-full flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors cursor-pointer text-left"
-      >
-        <div className={`w-8 h-8 flex items-center justify-center rounded-lg flex-shrink-0 mt-0.5 ${linkCopied ? 'bg-emerald-50 text-emerald-600' : 'bg-teal-50 text-teal-600'}`}>
-          <i className={`${linkCopied ? 'ri-check-line' : 'ri-link-m'} text-sm`} />
-        </div>
-        <div>
-          <p className="text-xs font-semibold text-gray-800">{linkCopied ? 'Link copied!' : 'Copy Share Link'}</p>
-          <p className="text-[10px] text-gray-400 mt-0.5 font-mono truncate">{shareUrl}</p>
-        </div>
-      </button>
-
-      <div className="mx-4 mt-1 pt-2 border-t border-gray-50">
-        <p className="text-[9px] text-gray-300 leading-relaxed">Anyone with the link can view a read-only snapshot of this analysis report.</p>
-      </div>
-    </div>
-  );
-}
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function ResultsSection({ onClose, run }: { onClose?: () => void; run?: AnalysisRun | null }) {
   const contentRef = useRef<HTMLDivElement>(null);
   const backendResult = run?.backendResult ?? null;
   const papers = run?.backendPapers ?? [];
-  const visibleSummary = backendResult?.analysisReport?.reportMarkdown?.trim()
-    || backendResult?.analysisReport?.reportSummary?.trim()
-    || '';
+  const visibleSummary = injectTrendSection(
+    backendResult?.analysisReport?.reportMarkdown?.trim()
+      || backendResult?.analysisReport?.reportSummary?.trim()
+      || '',
+    backendResult
+  );
   const { addSnapshot } = useSnapshots();
   const [saveModalOpen, setSaveModalOpen] = useState(false);
   const [savedFeedback, setSavedFeedback] = useState(false);
   const [methodologyOpen, setMethodologyOpen] = useState(false);
   const [snapshotsPanelOpen, setSnapshotsPanelOpen] = useState(false);
-  const [shareDropdownOpen, setShareDropdownOpen] = useState(false);
-  const shareRef = useRef<HTMLDivElement>(null);
-
-  // Close share dropdown on outside click
-  useEffect(() => {
-    if (!shareDropdownOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (shareRef.current && !shareRef.current.contains(e.target as Node)) {
-        setShareDropdownOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [shareDropdownOpen]);
 
   const handlePrint = () => {
     const html = buildPrintHTML(backendResult);
@@ -624,19 +627,6 @@ export default function ResultsSection({ onClose, run }: { onClose?: () => void;
               <i className="ri-bookmark-2-line text-xs" />
             </button>
             */}
-
-            {/* Share Report */}
-            <div ref={shareRef} className="relative">
-              <button
-                onClick={() => setShareDropdownOpen(prev => !prev)}
-                className={`whitespace-nowrap flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors cursor-pointer ${shareDropdownOpen ? 'bg-teal-50 text-teal-700 border-teal-200' : 'border-gray-200 text-gray-500 hover:bg-teal-50 hover:text-teal-600 hover:border-teal-200'}`}
-              >
-                <i className="ri-share-line text-xs" />
-                Share
-                <i className={`ri-arrow-${shareDropdownOpen ? 'up' : 'down'}-s-line text-xs`} />
-              </button>
-              {shareDropdownOpen && <ShareDropdown backendResult={backendResult} onClose={() => setShareDropdownOpen(false)} />}
-            </div>
 
             {/* Print */}
             <button

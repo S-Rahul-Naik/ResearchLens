@@ -6,13 +6,12 @@ import TopBar from './components/TopBar';
 import OverviewSection from './sections/OverviewSection';
 import DatasetsSection from './sections/DatasetsSection';
 import GapsSection from './sections/GapsSection';
-import TopicsSection from './sections/TopicsSection';
+import HistorySection from './sections/HistorySection';
 import TrendsSection from './sections/TrendsSection';
 import MapSection from './sections/MapSection';
 import ChatbotSection from './sections/ChatbotSection';
 import EvaluationSection from './sections/EvaluationSection';
 import ResultsSection from './sections/ResultsSection';
-import AnalysisHistoryPanel from './components/AnalysisHistoryPanel';
 import { useAnalysisHistory, type AnalysisRun } from '../../hooks/useAnalysisHistory';
 import type { RunAllResult, BackendPaper } from '../../lib/api';
 
@@ -20,10 +19,9 @@ export default function DashboardPage() {
   const { isAuthenticated, isAuthInitializing } = useAuth();
   const [section, setSection] = useState<DashboardSection>('overview');
   const [showResultsOverlay, setShowResultsOverlay] = useState(false);
-  const [historyPanelOpen, setHistoryPanelOpen] = useState(false);
   const [currentRun, setCurrentRun] = useState<AnalysisRun | null>(null);
 
-  const { runs, addRun, removeRun, clearAll, sessionRunCount } = useAnalysisHistory();
+  const { runs, addRun } = useAnalysisHistory();
   const latestRun = runs[0] ?? null;
 
   // On initial load, set currentRun to latestRun if available
@@ -57,7 +55,6 @@ export default function DashboardPage() {
   const handleViewHistoryRun = (run: AnalysisRun) => {
     setCurrentRun(run);
     setShowResultsOverlay(true);
-    setHistoryPanelOpen(false);
   };
 
   const renderSection = () => {
@@ -65,6 +62,7 @@ export default function DashboardPage() {
       case 'overview': return <OverviewSection onNavigate={setSection} latestRun={latestRun} />;
       case 'datasets': return <DatasetsSection onShowResults={handleShowResults} />;
       case 'gaps': return <GapsSection backendResult={currentRun?.backendResult} papers={currentRun?.backendPapers ?? []} />;
+      case 'history': return <HistorySection runs={runs} onViewRun={handleViewHistoryRun} />;
       case 'topics': return <TopicsSection backendResult={currentRun?.backendResult} papers={currentRun?.backendPapers ?? []} />;
       case 'trends': return <TrendsSection backendResult={currentRun?.backendResult} papers={currentRun?.backendPapers ?? []} />;
       case 'map': return <MapSection backendResult={currentRun?.backendResult} papers={currentRun?.backendPapers ?? []} />;
@@ -79,8 +77,6 @@ export default function DashboardPage() {
       <Sidebar
         active={section}
         onNavigate={setSection}
-        onOpenHistory={() => setHistoryPanelOpen(true)}
-        sessionRunCount={sessionRunCount}
       />
       <div className="flex-1 flex flex-col overflow-hidden">
         <TopBar section={section} />
@@ -99,14 +95,6 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <AnalysisHistoryPanel
-        open={historyPanelOpen}
-        onClose={() => setHistoryPanelOpen(false)}
-        onViewRun={handleViewHistoryRun}
-        runs={runs}
-        removeRun={removeRun}
-        clearAll={clearAll}
-      />
     </div>
   );
 }

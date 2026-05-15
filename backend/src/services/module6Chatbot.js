@@ -8,10 +8,16 @@ const {
   toFixedNumber
 } = require('../utils/text');
 
-const OLLAMA_API = process.env.OLLAMA_API || 'http://127.0.0.1:11434/v1/completions';
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3.1:8b';
-const OLLAMA_TIMEOUT_MS = parseInt(process.env.OLLAMA_TIMEOUT_MS, 10) || 120000;
-const OLLAMA_MAX_TOKENS = parseInt(process.env.OLLAMA_MAX_TOKENS, 10) || 256;
+const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434';
+const OLLAMA_CHAT_API = process.env.OLLAMA_CHAT_API || `${OLLAMA_BASE_URL}/api/generate`;
+const OLLAMA_CHAT_MODEL = process.env.OLLAMA_CHAT_MODEL || process.env.OLLAMA_MODEL || 'gemma3:1b';
+const OLLAMA_TIMEOUT_MS = parseInt(process.env.OLLAMA_CHAT_TIMEOUT_MS, 10) || 60000;
+const OLLAMA_MAX_TOKENS = parseInt(process.env.OLLAMA_CHAT_MAX_TOKENS, 10) || 128;
+
+function isIdentityQuestion(question) {
+  const text = question.toLowerCase();
+  return /\b(who are you|what are you|who r u|who r you|what is your name|what can you do|help me|about you)\b/.test(text);
+}
 
 function createChunks(papers) {
   const chunks = [];
@@ -35,14 +41,14 @@ function createChunks(papers) {
 async function callOllama(prompt) {
   try {
     const response = await axios.post(
-      OLLAMA_API,
+      OLLAMA_CHAT_API,
       {
-        model: OLLAMA_MODEL,
+        model: OLLAMA_CHAT_MODEL,
         prompt,
         stream: false,
-        temperature: 0.7,
+        temperature: 0.3,
         top_p: 0.9,
-        max_tokens: OLLAMA_MAX_TOKENS,
+        num_predict: OLLAMA_MAX_TOKENS,
       },
       { timeout: OLLAMA_TIMEOUT_MS }
     );
@@ -61,40 +67,38 @@ async function callOllama(prompt) {
 }
 
 function buildOllamaPrompt(question, rankedChunks, topics, gaps, trends, papers, allChunks = []) {
-  // Build comprehensive context for Ollama - optimized for length
   let contextParts = [];
 
-  // 1. Corpus overview
+  // Compact context keeps local generation fast.
   contextParts.push(`Research Corpus: ${papers.length} papers analyzed`);
   
-  // 2. Top papers (just titles + years)
+  // Top papers
   if (papers.length > 0) {
     contextParts.push('\nKey Papers:');
-    papers.slice(0, 5).forEach((paper, idx) => {
+    papers.slice(0, 3).forEach((paper, idx) => {
       contextParts.push(`${idx + 1}. ${paper.title} (${paper.year})`);
     });
   }
 
-  // 3. Topics summary
+  // Topics summary
   if (topics && topics.length > 0) {
     contextParts.push('\nMain Topics:');
-    topics.slice(0, 5).forEach((topic, idx) => {
+    topics.slice(0, 3).forEach((topic, idx) => {
       contextParts.push(`${idx + 1}. ${topic.name || 'Unknown'}`);
     });
   }
 
-  // 4. Research gaps summary
+  // Research gaps summary
   if (gaps && gaps.length > 0) {
     contextParts.push('\nResearch Gaps:');
-    gaps.slice(0, 3).forEach((gap, idx) => {
+    gaps.slice(0, 2).forEach((gap, idx) => {
       const desc = gap.gapStatement || gap.description || gap.explanation || 'Gap between topics';
-      // collect evidence snippets for this gap from allChunks
       const evidenceIds = gap.evidencePaperIds || gap.paperIdsBridging || (gap.paperIdsInA || []).concat(gap.paperIdsInB || []);
       const evidences = [];
       if (evidenceIds && evidenceIds.length > 0 && allChunks.length > 0) {
-        for (const pid of evidenceIds.slice(0, 3)) {
+        for (const pid of evidenceIds.slice(0, 2)) {
           const match = allChunks.find(c => c.paperId === pid);
-          if (match) evidences.push({ paperId: pid, title: match.title, snippet: match.text.substring(0, 180).replace(/\s+/g, ' ').trim() });
+          if (match) evidences.push({ paperId: pid, title: match.title, snippet: match.text.substring(0, 120).replace(/\s+/g, ' ').trim() });
         }
       }
       contextParts.push(`${idx + 1}. ${desc}`);
@@ -105,28 +109,28 @@ function buildOllamaPrompt(question, rankedChunks, topics, gaps, trends, papers,
     });
   }
 
-  // 5. Trends summary
+  // Trends summary
   if (trends && trends.length > 0) {
     contextParts.push('\nResearch Trends:');
-    trends.slice(0, 3).forEach((trend, idx) => {
+    trends.slice(0, 2).forEach((trend, idx) => {
       contextParts.push(`${idx + 1}. ${trend.topicName || trend.name || 'Unknown'}: ${trend.trend || 'stable'}`);
     });
   }
 
-  // 6. Top relevant passages (main context)
+  // Top relevant passages
   if (rankedChunks && rankedChunks.length > 0) {
     contextParts.push('\nMost Relevant Content:');
-    rankedChunks.slice(0, 3).forEach((chunk, idx) => {
+    rankedChunks.slice(0, 2).forEach((chunk, idx) => {
       const snippet = chunk.text.replace(/\s+/g, ' ').trim();
       contextParts.push(`${idx + 1}. From "${chunk.title}":`);
-      contextParts.push(`"${snippet.substring(0, 200)}..."`);
+      contextParts.push(`"${snippet.substring(0, 120)}..."`);
     });
   }
 
   contextParts.push('\nUser Question:');
   contextParts.push(question);
   
-  contextParts.push('\nInstructions: Answer based on the corpus above. Cite papers when possible. Keep answer under 200 words.');
+  contextParts.push('\nInstructions: Use only the evidence above. If the context does not support an answer, say you cannot verify it from the uploaded papers. Do not invent facts. Answer in at most 3 short bullets. Cite paper titles when possible.');
 
   return contextParts.join('\n');
 }
@@ -136,6 +140,14 @@ async function runModule6Chatbot(papers, question, topics = [], gaps = [], trend
     return {
       module: 'M6 RAG Chatbot',
       answer: 'Please provide a question.',
+      citations: []
+    };
+  }
+
+  if (isIdentityQuestion(question)) {
+    return {
+      module: 'M6 RAG Chatbot',
+      answer: 'I am ResearchLens AI, a paper-analysis assistant. I can answer questions about your uploaded research papers.',
       citations: []
     };
   }
@@ -163,7 +175,7 @@ async function runModule6Chatbot(papers, question, topics = [], gaps = [], trend
         score: cosineSimilarity(questionVector, chunkVectors[i])
       }))
       .sort((a, b) => b.score - a.score)
-      .slice(0, 6);
+      .slice(0, 4);
 
     // Build comprehensive prompt and call Ollama
     const prompt = buildOllamaPrompt(question, ranked, topics, gaps, trends, papers, chunks);

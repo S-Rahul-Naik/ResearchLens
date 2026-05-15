@@ -2,14 +2,13 @@ import { useRef, useState } from 'react';
 import type { DashboardSection } from './Sidebar';
 import ExportHistoryPanel from './ExportHistoryPanel';
 import SnapshotsPanel from './SnapshotsPanel';
-import AnalysisHistoryPanel from './AnalysisHistoryPanel';
 import { useAuth } from '../../../hooks/useAuth';
 
 const sectionMeta: Record<DashboardSection, { title: string; subtitle: string; icon: string }> = {
   overview: { title: 'Overview', subtitle: 'Your research analysis summary', icon: 'ri-dashboard-3-line' },
   datasets: { title: 'Datasets', subtitle: 'Manage and process your uploaded papers', icon: 'ri-database-2-line' },
   gaps: { title: 'Gap Detection', subtitle: 'Detected research gaps with explainability', icon: 'ri-radar-line' },
-  topics: { title: 'Topic Explorer', subtitle: 'Browse and explore discovered topics', icon: 'ri-price-tag-3-line' },
+  history: { title: 'History', subtitle: 'Review saved analysis reports and uploaded papers', icon: 'ri-history-line' },
   trends: { title: 'Trend Analysis', subtitle: 'Topic publication trends over time', icon: 'ri-line-chart-line' },
   map: { title: 'Research Map', subtitle: '2D UMAP projection with gap connections', icon: 'ri-map-2-line' },
   chatbot: { title: 'AI Chatbot', subtitle: 'Ask questions about your uploaded papers', icon: 'ri-chat-3-line' },
@@ -25,7 +24,6 @@ export default function TopBar({ section }: TopBarProps) {
   const meta = sectionMeta[section];
   const [historyOpen, setHistoryOpen] = useState(false);
   const [snapshotsOpen, setSnapshotsOpen] = useState(false);
-  const [analysisHistoryOpen, setAnalysisHistoryOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [profileName, setProfileName] = useState(user?.name ?? '');
@@ -135,14 +133,6 @@ export default function TopBar({ section }: TopBarProps) {
             className="whitespace-nowrap relative w-9 h-9 flex items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:bg-violet-50 hover:text-violet-600 hover:border-violet-200 transition-colors cursor-pointer"
           >
             <i className="ri-bookmark-3-line text-sm" />
-          </button>
-          {/* Analysis History Button */}
-          <button
-            onClick={() => setAnalysisHistoryOpen(true)}
-            title="Analysis History"
-            className="whitespace-nowrap relative w-9 h-9 flex items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:bg-teal-50 hover:text-teal-600 hover:border-teal-200 transition-colors cursor-pointer"
-          >
-            <i className="ri-time-line text-sm" />
           </button>
           {/* Export History Button */}
           <button
@@ -312,7 +302,6 @@ export default function TopBar({ section }: TopBarProps) {
 
       <ExportHistoryPanel open={historyOpen} onClose={() => setHistoryOpen(false)} />
       <SnapshotsPanel open={snapshotsOpen} onClose={() => setSnapshotsOpen(false)} />
-      <AnalysisHistoryPanel open={analysisHistoryOpen} onClose={() => setAnalysisHistoryOpen(false)} />
     </>
   );
 }

@@ -5,7 +5,7 @@ export type DashboardSection =
   | 'overview'
   | 'datasets'
   | 'gaps'
-  | 'topics'
+  | 'history'
   | 'trends'
   | 'map'
   | 'chatbot'
@@ -14,21 +14,18 @@ export type DashboardSection =
 interface SidebarProps {
   active: DashboardSection;
   onNavigate: (section: DashboardSection) => void;
-  onOpenHistory?: () => void;
-  sessionRunCount?: number;
 }
 
 const navItems: { id: DashboardSection; label: string; icon: string; badge?: string }[] = [
   { id: 'overview', label: 'Overview', icon: 'ri-dashboard-3-line' },
   { id: 'datasets', label: 'Datasets', icon: 'ri-database-2-line' },
   { id: 'gaps', label: 'Gap Detection', icon: 'ri-radar-line', badge: 'Main' },
-  { id: 'topics', label: 'Topic Explorer', icon: 'ri-price-tag-3-line' },
   { id: 'trends', label: 'Trend Analysis', icon: 'ri-line-chart-line' },
-  { id: 'map', label: 'Research Map', icon: 'ri-map-2-line' },
+  { id: 'history', label: 'History', icon: 'ri-history-line' },
   { id: 'chatbot', label: 'AI Chatbot', icon: 'ri-chat-3-line' },
 ];
 
-export default function Sidebar({ active, onNavigate, onOpenHistory, sessionRunCount = 0 }: SidebarProps) {
+export default function Sidebar({ active, onNavigate }: SidebarProps) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -80,24 +77,6 @@ export default function Sidebar({ active, onNavigate, onOpenHistory, sessionRunC
           );
         })}
 
-        {/* History separator */}
-        <div className="mt-3 pt-3 border-t border-white/8">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-white/25 px-3 mb-2">Records</p>
-          <button
-            onClick={onOpenHistory}
-            className="whitespace-nowrap w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer text-left text-white/55 hover:text-white/90 hover:bg-white/5"
-          >
-            <div className="w-5 h-5 flex items-center justify-center flex-shrink-0">
-              <i className="ri-history-line text-base" />
-            </div>
-            <span className="flex-1">Analysis History</span>
-            {sessionRunCount > 0 && (
-              <span className="text-[10px] font-bold bg-teal-500 text-white px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
-                {sessionRunCount}
-              </span>
-            )}
-          </button>
-        </div>
       </nav>
 
       {/* User */}
