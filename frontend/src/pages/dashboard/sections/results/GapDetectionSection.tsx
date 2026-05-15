@@ -2,14 +2,10 @@ import { useState } from 'react';
 import type { BackendPaper, RunAllResult } from '../../../../lib/api';
 
 // Unified gap type for display
-interface GapPaper { id: string; title: string; authors: string[]; year: number; }
 interface DisplayGap {
   id: string; topicAId: string; topicBId: string;
   topicAName: string; topicBName: string;
-  topicAKeywords: string[]; topicBKeywords: string[];
-  topicAColor: string; topicBColor: string;
   similarityScore: number; coOccurrenceCount: number; gapScore: number;
-  papersA: GapPaper[]; papersB: GapPaper[]; papersBridging: GapPaper[];
   explanation: string;
 }
 
@@ -64,54 +60,6 @@ function EvidencePanel({ gap, onClose }: { gap: DisplayGap; onClose: () => void 
             <p className="text-xs text-gray-700 leading-relaxed">{gap.explanation}</p>
           </div>
 
-          {/* Two-column topics */}
-          <div className="grid grid-cols-2 gap-4">
-            {[
-              { title: `Topic A: ${gap.topicAName}`, keywords: gap.topicAKeywords, papers: gap.papersA, color: gap.topicAColor },
-              { title: `Topic B: ${gap.topicBName}`, keywords: gap.topicBKeywords, papers: gap.papersB, color: gap.topicBColor },
-            ].map(t => (
-              <div key={t.title} className="bg-white border border-gray-100 rounded-xl p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: t.color }} />
-                  <p className="text-xs font-semibold text-gray-800">{t.title}</p>
-                </div>
-                <div className="flex flex-wrap gap-1 mb-3">
-                  {t.keywords.map(kw => (
-                    <span key={kw} className="text-[10px] px-1.5 py-0.5 rounded-full font-medium"
-                      style={{ backgroundColor: `${t.color}15`, color: t.color }}>{kw}</span>
-                  ))}
-                </div>
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">Papers</p>
-                {t.papers.map(p => (
-                  <div key={p.id} className="text-[11px] text-gray-600 py-0.5 border-b border-gray-50 last:border-0 leading-snug">{p.title}</div>
-                ))}
-              </div>
-            ))}
-          </div>
-
-          {/* Bridging papers */}
-          <div>
-            <p className="text-xs font-semibold text-gray-700 mb-2 flex items-center gap-2">
-              <i className="ri-links-line text-teal-600" />
-              Bridging Papers
-              <span className="text-[10px] bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded-full">{gap.papersBridging.length}</span>
-            </p>
-            {gap.papersBridging.length === 0 ? (
-              <div className="bg-rose-50 border border-rose-100 rounded-lg px-4 py-2.5 text-xs text-rose-700">
-                <i className="ri-error-warning-line mr-1" />
-                No paper currently addresses both topics — confirming this gap.
-              </div>
-            ) : (
-              <div className="space-y-1.5">
-                {gap.papersBridging.map(p => (
-                  <div key={p.id} className="bg-teal-50 border border-teal-100 rounded-lg px-4 py-2.5">
-                    <p className="text-xs font-medium text-teal-800">{p.title}</p>
-                    <p className="text-[10px] text-teal-600">{p.authors[0]} et al. &middot; {p.year > 0 ? p.year : ''}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
         </div>
       </div>
     </div>
@@ -216,43 +164,23 @@ export default function GapDetectionSection({ backendResult, papers = [] }: { ba
   // Build DisplayGap[] from backend result
   const allGaps: DisplayGap[] = backendResult
     ? (() => {
-        const summaries = backendResult.modules.module1.summaries;
-        const topics = backendResult.modules.module2.topics;
-        const paperMap = new Map(papers.map(p => [p.id, p]));
-        const paperById = (pid: string): GapPaper => {
-          const backendPaper = paperMap.get(pid);
-          if (backendPaper) {
-            return {
-              id: backendPaper.id,
-              title: backendPaper.title || pid,
-              authors: Array.isArray(backendPaper.authors) ? backendPaper.authors : ['–'],
-              year: Number(backendPaper.year) || 0,
-            };
-          }
-          const summary = summaries.find(su => su.paperId === pid);
-          return { id: pid, title: summary?.title ?? pid, authors: ['–'], year: 0 };
-        };
-        return backendResult.modules.module3.gaps.map((g, i) => {
-          const topicAEntry = topics.find(t => t.topicId === g.topicA);
-          const topicBEntry = topics.find(t => t.topicId === g.topicB);
-          const topicAPaperIds = topicAEntry?.paperIds ?? [];
-          const topicBPaperIds = topicBEntry?.paperIds ?? [];
-          const bridgingPaperIds = Array.from(new Set(g.evidencePaperIds ?? []));
+        const modules = backendResult.modules ?? ({} as RunAllResult['modules']);
+        return (modules.module3?.gaps ?? []).map((g, i) => {
+          const coOccurrenceCount = Number(
+            (g as any).coOccurrence ??
+            (g as any).coOccurrenceCount ??
+            (g as any).co_occurrence ??
+            0
+          );
           return {
             id: g.gapId,
             topicAId: g.topicA, topicBId: g.topicB,
-            topicAName: g.topicALabel, topicBName: g.topicBLabel,
-            topicAKeywords: topicAEntry?.keywords ?? [],
-            topicBKeywords: topicBEntry?.keywords ?? [],
-            topicAColor: TOPIC_COLORS[i * 2 % TOPIC_COLORS.length],
-            topicBColor: TOPIC_COLORS[(i * 2 + 1) % TOPIC_COLORS.length],
+            topicAName: g.topicALabel || g.topicA,
+            topicBName: g.topicBLabel || g.topicB,
             similarityScore: g.similarity,
-            coOccurrenceCount: g.coOccurrence,
+            coOccurrenceCount,
             gapScore: g.gapScore,
-            papersA: topicAPaperIds.map(paperById),
-            papersB: topicBPaperIds.map(paperById),
-            papersBridging: bridgingPaperIds.map(paperById),
-            explanation: g.recommendation,
+            explanation: g.recommendation || (g as any).explanation || g.gapExplanation || '',
           } satisfies DisplayGap;
         });
       })()

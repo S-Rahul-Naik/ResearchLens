@@ -1,0 +1,409 @@
+{
+  "name": "ResearchLens 5-Section Analysis (Ollama - Fixed)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "researchlens-5-section-analysis-modular",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "e46192e4-801d-4d5f-af8d-a0865c34d0b3",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -912,
+        352
+      ],
+      "webhookId": "webhook-researchlens-5-section-modular-ollama"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.all()[0]?.json?.body || $input.all()[0]?.json || {};\nconst papers = body.papers || [];\nconst question = body.question || 'What are the key findings, research gaps and emerging topics?';\nconst timestamp = body.timestamp || new Date().toISOString();\n\n// Build comprehensive papersList with full content for LLM analysis\nconst papersList = papers.map((p, i) => {\n  const fullText = p.content || p.abstract || '';\n  const authors = (p.authors || []).join(', ') || 'Unknown';\n  const year = p.year || 'N/A';\n  \n  return `=== PAPER ${i+1} ===\\nTitle: ${p.title}\\nAuthors: ${authors}\\nYear: ${year}\\nID: ${p.id}\\n\\nFull Content:\\n${fullText}`;\n}).join('\\n\\n');\n\nreturn [{json: {\n  papers,\n  question,\n  timestamp,\n  papersList,\n  chatInput: `Papers Data:\\n${papersList}\\n\\n\\nAnalysis Question:\\n${question}`,\n  papersCount: papers.length,\n  papersInfo: papers.map(p => ({ id: p.id, title: p.title, year: p.year }))\n}}];"
+      },
+      "id": "1d3b4f78-28d2-4520-9bf1-af8bd8a4e1ad",
+      "name": "Prepare Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -560,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "unit": "seconds"
+      },
+      "id": "d5c5f754-8939-45f2-a3e6-3e06241560ed",
+      "name": "Delay (1s)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        112,
+        176
+      ],
+      "webhookId": "ba1eaa76-73f2-479a-a895-9cd027f6a03f"
+    },
+    {
+      "parameters": {
+        "amount": 2,
+        "unit": "seconds"
+      },
+      "id": "9dabef40-c201-4590-aad7-a02dd975f3ba",
+      "name": "Delay (2s)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        112,
+        400
+      ],
+      "webhookId": "82db76f6-6cc5-4466-86e9-c27913a9be68"
+    },
+    {
+      "parameters": {
+        "amount": 3,
+        "unit": "seconds"
+      },
+      "id": "e7bc446b-07b4-4177-a4ef-ff3c4ca4b5e1",
+      "name": "Delay (3s)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        112,
+        640
+      ],
+      "webhookId": "51d53cd5-96aa-4854-a2b7-0df039efcd9f"
+    },
+    {
+      "parameters": {
+        "mode": "merge",
+        "mergeByFields": []
+      },
+      "id": "92185b51-8ef7-4f91-abe3-c7b3a13d20a8",
+      "name": "Merge Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2,
+      "position": [
+        480,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const inputs = $input.all();\n\nconst parseCandidateText = (obj) => {\n  if (!obj) return obj;\n  const candidates = obj.candidates ?? (Array.isArray(obj) ? obj : null);\n  if (candidates && candidates[0]?.content?.parts?.[0]?.text) {\n    const text = candidates[0].content.parts[0].text;\n    const m = text.match(/```json\\s*([\\s\\S]*?)\\s*```/);\n    const jsonString = m ? m[1] : text;\n    try { return JSON.parse(jsonString); } catch(e) { return obj; }\n  }\n  return obj;\n};\n\n// Combine all 4 module outputs from merge\nconst combined = {\n  summarization: {},\n  gapDetection: {},\n  trendDetection: {},\n  visualization: {},\n  timestamp: new Date().toISOString(),\n  status: 'completed'\n};\n\n// Parse each input from Merge node\nfor (let i = 0; i < inputs.length; i++) {\n  const parsed = parseCandidateText(inputs[i]?.json || {});\n  \n  // Assign to appropriate module based on order\n  if (i === 0) combined.summarization = parsed;\n  else if (i === 1) combined.gapDetection = parsed;\n  else if (i === 2) combined.trendDetection = parsed;\n  else if (i === 3) combined.visualization = parsed;\n}\n\nreturn [{ json: combined }];"
+      },
+      "id": "combine-modules-final",
+      "name": "Combine Modules",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        650,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "dee6a10e-96a4-47f2-b6b3-7220c3c0966a",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        832,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyAvRlXZAwPZlG99Ya3LRIFzvppdjWK1Q5k",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "=raw",
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "body": "={{ JSON.stringify({\n  contents: [\n    {\n      parts: [\n        {\n          text: 'Analyze these research papers and return ONLY valid JSON (no markdown). Question: ' + $json.question + '\\n\\nPapers:\\n' + $json.papersList + '\\n\\nReturn only this exact JSON structure:\\n{\\n \"module1\": { \"summaries\": [{ \"paperId\": \"p1\", \"summary\": \"2-3 sentences\", \"keyFindings\": [\"f1\",\"f2\"], \"keywords\": [\"k1\",\"k2\"] }] },\\n \"module2\": { \"topics\": [{ \"id\": \"topic_001\", \"name\": \"Topic Name\", \"coherence\": 0.85, \"paperIds\": [\"p1\",\"p2\"], \"keywords\": [\"k1\",\"k2\"] }], \"assignments\": [{ \"paperId\": \"p1\", \"topicId\": \"topic_001\" }], \"coverage\": 0.9 }\\n}'\n        }\n      ]\n    }\n  ],\n  generationConfig: {\n    temperature: 0.2,\n    maxOutputTokens: 10000\n  }\n}) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        16,
+        0
+      ],
+      "id": "3c7c27b6-fb6f-4036-820d-45f5ad590d87",
+      "name": "Summarization (Ollama)1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyAtmwtoBFy1DkGLrZ4b1nebu4h0qJNcwsA",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "=raw",
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "body": "={{ JSON.stringify({\n  contents: [\n    {\n      parts: [\n        {\n          text: 'Analyze temporal trends in these research papers. Return ONLY valid JSON (no markdown, no extra text).\\n\\nQuestion: ' + $json.question + '\\n\\nPapers:\\n' + $json.papersList + '\\n\\nReturn only this JSON structure:\\n{\\n  \\\"module4_trends\\\": [\\n    {\\n      \\\"topicId\\\": \\\"topic_001\\\",\\n      \\\"topic\\\": \\\"topic name\\\",\\n      \\\"trend\\\": \\\"rising\\\",        /* rising | declining | stable */\\n      \\\"strength\\\": 0.75,          /* 0-1 */\\n      \\\"yearlyCounts\\\": [ { \\\"year\\\": 2019, \\\"count\\\": 1 }, { \\\"year\\\": 2020, \\\"count\\\": 3 } ],\\n      \\\"description\\\": \\\"Trend explanation\\\"\\n    }\\n  ],\\n  \\\"trendMetrics\\\": {\\n    \\\"risingCount\\\": 3,\\n    \\\"decliningCount\\\": 1,\\n    \\\"avgStrength\\\": 0.68\\n  }\\n}\\n\\nOptionally include \\\"assignments\\\" if available: [{\\\"paperId\\\":\\\"p1\\\",\\\"topicId\\\":\\\"topic_001\\\"}]'\n        }\n      ]\n    }\n  ],\n  generationConfig: { temperature: 0.2, maxOutputTokens: 10000 }\n}) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -48,
+        400
+      ],
+      "id": "0bee0f57-18e5-416f-ba48-60c2eef23db2",
+      "name": "Trend Detection (Ollama)",
+      "retryOnFail": false,
+      "alwaysOutputData": false,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyBVTs-QGRxxYvjj-PHsu2fEqv3o54iJtSE",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "=raw",
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "body": "={{ JSON.stringify({\n  contents: [\n    {\n      parts: [\n        {\n          text: 'Identify research gaps between topics in these papers. Return ONLY valid JSON (no markdown, no extra text).\\n\\nQuestion: ' + $json.question + '\\n\\nPapers:\\n' + $json.papersList + '\\n\\nReturn only this JSON structure:\\n{\\n  \\\"gaps\\\": [\\n    {\\n      \\\"gapId\\\": \\\"gap_001\\\",\\n      \\\"topicA\\\": \\\"topic name\\\",\\n      \\\"topicB\\\": \\\"topic name\\\",\\n      \\\"topicALabel\\\": \\\"Topic A Label\\\",\\n      \\\"topicBLabel\\\": \\\"Topic B Label\\\",\\n      \\\"similarity\\\": 0.60,\\n      \\\"coOccurrence\\\": 2,\\n      \\\"gapScore\\\": 0.72,\\n      \\\"noveltyScore\\\": 0.68,\\n      \\\"explanation\\\": \\\"Why this gap matters\\\"\\n    }\\n  ],\\n  \\\"qualityMetrics\\\": {\\n    \\\"noveltyAverage\\\": 0.65,\\n    \\\"gapDensity\\\": 0.40\\n  }\\n}\\n\\nOptionally include an \\\"assignments\\\" array if useful: [{\\\"paperId\\\":\\\"p1\\\",\\\"topicId\\\":\\\"topic_001\\\"}]'\n        }\n      ]\n    }\n  ],\n  generationConfig: { temperature: 0.2, maxOutputTokens: 10000 }\n}) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -48,
+        176
+      ],
+      "id": "dcc9a5e5-53f4-4bb6-a7a8-255d1c52e5eb",
+      "name": "Gap Detection (Ollama)",
+      "retryOnFail": false,
+      "alwaysOutputData": false,
+      "waitBetweenTries": 4000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyAFr2_Ix5xdIoFIseRziSaF7i9X4xdCKzU",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-goog-api-key",
+              "value": "AIzaSyBHmW2ywcXYfZy_bpJcfcmt2Ats5TzsbTg"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "=raw",
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "body": "={{ JSON.stringify({\n  contents: [\n    {\n      parts: [\n        {\n          text: 'Create visualization-ready data and a scientific-honesty evaluation. Return ONLY valid JSON (no markdown, no extra text).\\n\\nQuestion: ' + $json.question + '\\n\\nPapers:\\n' + $json.papersList + '\\n\\nReturn only this JSON structure:\\n{\\n  \\\"module5\\\": {\\n    \\\"points\\\": [ { \\\"x\\\": 0.1, \\\"y\\\": 0.2, \\\"label\\\": \\\"topic1\\\", \\\"size\\\": 10 } ],\\n    \\\"gaps\\\": [ { \\\"x\\\": 0.3, \\\"y\\\": 0.4, \\\"importance\\\": 0.7 } ],\\n    \\\"description\\\": \\\"Research landscape summary\\\"\\n  },\\n  \\\"module10\\\": {\\n    \\\"honestyScore\\\": 0.82, /* 0-1 */\\n    \\\"scoreDetails\\\": {\\n      \\\"citationAccuracy\\\": 0.85,\\n      \\\"methodTransparency\\\": 0.80,\\n      \\\"limitationDisclosure\\\": 0.78,\\n      \\\"conflictOfInterest\\\": 0.85\\n    },\\n    \\\"riskFactors\\\": [\\\"potential bias\\\"],\\n    \\\"evaluation\\\": \\\"Overall scientific integrity assessment\\\"\\n  }\\n}\\n\\nOptionally include \\\"assignments\\\" or other arrays if helpful: [{\\\"paperId\\\":\\\"p1\\\",\\\"topicId\\\":\\\"topic_001\\\"}]'\n        }\n      ]\n    }\n  ],\n  generationConfig: { temperature: 0.2, maxOutputTokens: 10000 }\n}) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -48,
+        640
+      ],
+      "id": "c6c81374-548f-4abe-966f-0f86bf2ffc0d",
+      "name": "Visualization (Ollama)"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Input": {
+      "main": [
+        [
+          {
+            "node": "Delay (1s)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Delay (2s)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Delay (3s)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Summarization (Ollama)1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delay (1s)": {
+      "main": [
+        [
+          {
+            "node": "Gap Detection (Ollama)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delay (2s)": {
+      "main": [
+        [
+          {
+            "node": "Trend Detection (Ollama)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delay (3s)": {
+      "main": [
+        [
+          {
+            "node": "Visualization (Ollama)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Results": {
+      "main": [
+        [
+          {
+            "node": "Combine Modules",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine Modules": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarization (Ollama)1": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trend Detection (Ollama)": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gap Detection (Ollama)": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Visualization (Ollama)": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "3cb2ac01-090b-4bec-87f8-e8683574cfd6",
+  "meta": {
+    "instanceId": "faca5fa08d9ed606d8f3de4b79e9dece3c974c4f423f7fa7b2ae65f0b54a64cd"
+  },
+  "id": "3dqHyc7tbEnvLVhO",
+  "tags": []
+}

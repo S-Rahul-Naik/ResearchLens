@@ -330,7 +330,7 @@ export default function TopicsSection({ backendResult, papers: propPapers = [] }
   const [compareTopics, setCompareTopics] = useState<[Topic, Topic] | null>(null);
 
   const topics: Topic[] = useMemo(() => {
-    const raw = backendResult?.modules.module2.topics;
+    const raw = backendResult?.modules?.module2?.topics ?? [];
     if (raw && raw.length > 0) {
       return raw.map((t, i) => ({
         id: t.topicId,
@@ -358,7 +358,7 @@ export default function TopicsSection({ backendResult, papers: propPapers = [] }
   }, [propPapers]);
 
   const allTrends: TopicTrend[] = useMemo(() => {
-    const raw = backendResult?.modules.module4.trends;
+    const raw = backendResult?.modules?.module4?.trends ?? [];
     if (raw && raw.length > 0) {
       return raw.map((t, i) => {
         const sorted = [...t.yearlyCounts].sort((a, b) => a.year - b.year);

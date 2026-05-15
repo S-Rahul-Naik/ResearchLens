@@ -50,6 +50,14 @@ interface Centroid {
   paperCount: number;
 }
 
+interface TopicLabel {
+  key: string;
+  id: string;
+  name: string;
+  color: string;
+  paperIds: string[];
+}
+
 function bezierCurve(
   x1: number,
   y1: number,
@@ -93,18 +101,22 @@ export default function ResearchMapResultsSection({ backendResult }: { backendRe
   const [hoveredTopic, setHoveredTopic] = useState<string | null>(null);
 
   const br = backendResult;
+  const topics = br?.modules?.module2?.topics ?? [];
+  const mapPoints = br?.modules?.module5?.map?.points ?? [];
+  const mapLinks = br?.modules?.module5?.map?.links ?? [];
+  const gaps = br?.modules?.module3?.gaps ?? [];
 
   const adaptedPoints = useMemo(() => {
-    if (!br) return [];
+    if (!br || mapPoints.length === 0) return [];
 
     const topicColorMap = new Map<string, string>();
     const topicNameMap = new Map<string, string>();
-    br.modules.module2.topics.forEach((t, i) => {
+    topics.forEach((t, i) => {
       topicColorMap.set(t.topicId, TOPIC_COLORS[i % TOPIC_COLORS.length]);
       topicNameMap.set(t.topicId, t.name);
     });
 
-    return br.modules.module5.map.points.map((p) => {
+    return mapPoints.map((p) => {
       const point = p as PointResult & { year?: number };
       return {
         paperId: point.paperId,
@@ -117,7 +129,7 @@ export default function ResearchMapResultsSection({ backendResult }: { backendRe
         year: point.year ?? new Date().getFullYear(),
       };
     });
-  }, [br]);
+  }, [br, mapPoints, topics]);
 
   const normalizedPoints = useMemo(() => {
     if (adaptedPoints.length === 0) return [];
@@ -142,45 +154,47 @@ export default function ResearchMapResultsSection({ backendResult }: { backendRe
   }, [adaptedPoints]);
 
   const adaptedGaps = useMemo(() => {
-    if (!br) return [];
+    if (!br || mapLinks.length === 0) return [];
 
     const gapLookup = new Map(
-      (br.modules.module3.gaps ?? []).map((gap) => [`${gap.topicA}|${gap.topicB}`, gap])
+      gaps.map((gap) => [`${gap.topicA}|${gap.topicB}`, gap])
     );
 
-    return br.modules.module5.map.links.map((link, i) => {
+    return mapLinks.map((link, i) => {
       const mapLink = link as { sourceTopicId: string; targetTopicId: string; gapScore?: number; severity?: 'low' | 'moderate' | 'critical' };
       const gap = gapLookup.get(`${mapLink.sourceTopicId}|${mapLink.targetTopicId}`) ?? gapLookup.get(`${mapLink.targetTopicId}|${mapLink.sourceTopicId}`);
       return {
         id: gap?.gapId ?? `gap-${i}`,
         topicAId: mapLink.sourceTopicId,
         topicBId: mapLink.targetTopicId,
-        topicAName: br.modules.module2.topics.find(t => t.topicId === mapLink.sourceTopicId)?.name ?? mapLink.sourceTopicId,
-        topicBName: br.modules.module2.topics.find(t => t.topicId === mapLink.targetTopicId)?.name ?? mapLink.targetTopicId,
+        topicAName: topics.find(t => t.topicId === mapLink.sourceTopicId)?.name ?? mapLink.sourceTopicId,
+        topicBName: topics.find(t => t.topicId === mapLink.targetTopicId)?.name ?? mapLink.targetTopicId,
         gapScore: gap?.gapScore ?? mapLink.gapScore ?? 0,
-        explanation: gap?.explanation ?? gap?.recommendation ?? `Gap between ${br.modules.module2.topics.find(t => t.topicId === mapLink.sourceTopicId)?.name ?? mapLink.sourceTopicId} and ${br.modules.module2.topics.find(t => t.topicId === mapLink.targetTopicId)?.name ?? mapLink.targetTopicId}.`,
+        explanation: gap?.explanation ?? gap?.recommendation ?? `Gap between ${topics.find(t => t.topicId === mapLink.sourceTopicId)?.name ?? mapLink.sourceTopicId} and ${topics.find(t => t.topicId === mapLink.targetTopicId)?.name ?? mapLink.targetTopicId}.`,
         reliability: gap?.reliability,
         severity: gap?.severity ?? mapLink.severity,
         similarityScore: gap?.similarity,
         coOccurrenceCount: gap?.coOccurrence,
       };
     });
-  }, [br]);
+  }, [br, gaps, mapLinks, topics]);
 
   const allTopicIds = useMemo(() => {
-    return br ? br.modules.module2.topics.map(t => t.topicId) : [];
-  }, [br]);
+    return topics.map((t, i) => t.topicId || t.name || `topic-${i}`);
+  }, [topics]);
 
-  const topicLabels = useMemo(() => {
-    return br
-      ? br.modules.module2.topics.map((t, i) => ({
-          id: t.topicId,
-          name: t.name,
-          color: TOPIC_COLORS[i % TOPIC_COLORS.length],
-          paperIds: t.paperIds,
-        }))
-      : [];
-  }, [br]);
+  const topicLabels = useMemo<TopicLabel[]>(() => {
+    return topics.map((t, i) => {
+      const safeId = t.topicId || t.name || `topic-${i}`;
+      return {
+        key: safeId,
+        id: safeId,
+        name: t.name,
+        color: TOPIC_COLORS[i % TOPIC_COLORS.length],
+        paperIds: t.paperIds,
+      };
+    });
+  }, [topics]);
 
   const centroids = useMemo(() => {
     return allTopicIds
@@ -323,8 +337,8 @@ export default function ResearchMapResultsSection({ backendResult }: { backendRe
               {/* Soft radial gradient for topic halos */}
               {topicLabels.map((t) => (
                 <radialGradient
-                  key={`grad-${t.id}`}
-                  id={`halo-${t.id}`}
+                  key={`grad-${t.key}`}
+                  id={`halo-${t.key}`}
                   cx="50%"
                   cy="50%"
                   r="50%"
@@ -352,11 +366,11 @@ export default function ResearchMapResultsSection({ backendResult }: { backendRe
             {/* Topic halos */}
             {topicHalos.map((h) => (
               <circle
-                key={`halo-${h.topicId}`}
+                key={`halo-${h.topicId || h.topicName}`}
                 cx={h.x}
                 cy={h.y}
                 r={h.radius}
-                fill={`url(#halo-${h.topicId})`}
+                fill={`url(#halo-${h.topicId || h.topicName})`}
                 className="transition-opacity duration-300"
                 opacity={hoveredTopic && hoveredTopic !== h.topicId ? 0.3 : 1}
               />
@@ -646,7 +660,7 @@ export default function ResearchMapResultsSection({ backendResult }: { backendRe
       <div className="mt-4 flex flex-wrap gap-2">
         {topicLabels.map((t) => (
           <button
-            key={t.id}
+            key={t.key}
             className="flex items-center gap-2 bg-white rounded-lg border border-gray-100 px-3 py-2 hover:border-gray-200 transition-colors"
             onMouseEnter={() => setHoveredTopic(t.id)}
             onMouseLeave={() => setHoveredTopic(null)}

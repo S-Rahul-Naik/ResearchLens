@@ -2,12 +2,12 @@ import { useRef, useState, useEffect } from 'react';
 import type { AnalysisRun } from '../../../hooks/useAnalysisHistory';
 import type { BackendPaper, RunAllResult } from '../../../lib/api';
 import DatasetSummarySection from './results/DatasetSummarySection';
-import TopicModelingSection from './results/TopicModelingSection';
 import GapDetectionSection from './results/GapDetectionSection';
 import TrendAnalysisSection from './results/TrendAnalysisSection';
 import ResearchMapResultsSection from './results/ResearchMapResultsSection';
 import ChatResultsSection from './results/ChatResultsSection';
 import EvaluationSummarySection from './results/EvaluationSummarySection';
+import ReportSummarySection from './results/ReportSummarySection';
 import { useSnapshots } from '../../../hooks/useSnapshots';
 import SnapshotsPanel from '../components/SnapshotsPanel';
 
@@ -22,19 +22,7 @@ import SnapshotsPanel from '../components/SnapshotsPanel';
 ]; */
 
 const METHODOLOGY_SECTIONS = [
-  {
-    id: 'tm',
-    icon: 'ri-price-tag-3-line',
-    color: 'bg-slate-700',
-    title: 'Topic Modeling',
-    steps: [
-      { step: 'Embed', detail: 'Each paper\'s abstract is encoded with a BERT sentence-transformer into a 768-dim vector.' },
-      { step: 'Reduce', detail: 'UMAP reduces embeddings to 5 dimensions for clustering stability.' },
-      { step: 'Cluster', detail: 'HDBSCAN groups papers into dense topic clusters; outlier papers are reassigned to nearest centroid.' },
-      { step: 'Label', detail: 'Top TF-IDF terms per cluster become the topic keywords.' },
-    ],
-    note: 'Coherence score uses the UMass metric on within-topic paper pairs.',
-  },
+  // Topic Modeling removed per UI redesign — kept methodology for other panels
   {
     id: 'gd',
     icon: 'ri-radar-line',
@@ -521,6 +509,9 @@ export default function ResultsSection({ onClose, run }: { onClose?: () => void;
   const contentRef = useRef<HTMLDivElement>(null);
   const backendResult = run?.backendResult ?? null;
   const papers = run?.backendPapers ?? [];
+  const visibleSummary = backendResult?.analysisReport?.reportMarkdown?.trim()
+    || backendResult?.analysisReport?.reportSummary?.trim()
+    || '';
   const { addSnapshot } = useSnapshots();
   const [saveModalOpen, setSaveModalOpen] = useState(false);
   const [savedFeedback, setSavedFeedback] = useState(false);
@@ -692,8 +683,10 @@ export default function ResultsSection({ onClose, run }: { onClose?: () => void;
 
       {/* Content */}
       <div ref={contentRef} className="max-w-5xl mx-auto px-8 py-10">
+        {visibleSummary && (
+          <ReportSummarySection backendResult={backendResult} visibleSummary={visibleSummary} />
+        )}
         <DatasetSummarySection run={run} />
-        <TopicModelingSection backendResult={backendResult} />
         <GapDetectionSection backendResult={backendResult} papers={papers} />
         <TrendAnalysisSection backendResult={backendResult} />
         <ResearchMapResultsSection backendResult={backendResult} />

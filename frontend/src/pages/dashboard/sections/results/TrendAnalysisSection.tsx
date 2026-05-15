@@ -1,4 +1,3 @@
-import { mockTrends } from '../../../../mocks/trends';
 import type { RunAllResult } from '../../../../lib/api';
 
 const TOPIC_COLORS = ['#0d9488', '#f59e0b', '#8b5cf6', '#e11d48', '#3b82f6', '#ec4899', '#10b981', '#f97316'];
@@ -28,31 +27,41 @@ export default function TrendAnalysisSection({ backendResult }: { backendResult?
     llmConfidence?: number;
   }
 
-  const trends: DisplayTrend[] = br
-    ? br.modules.module4.trends.map((t, i) => {
-        const color = TOPIC_COLORS[i % TOPIC_COLORS.length];
-        const peak = t.yearlyCounts.reduce((best, yc) => yc.count > best.count ? yc : best, t.yearlyCounts[0] ?? { year: 0, count: 0 });
-        const maxC = Math.max(...t.yearlyCounts.map(yc => yc.count), 1);
-        const minC = Math.min(...t.yearlyCounts.map(yc => yc.count), 0);
-        const growthRate = maxC > 0 ? (maxC - minC) / maxC : 0;
-        return {
-          topicId: t.topicId,
-          topicName: t.topicName,
-          color,
-          trend: t.trend,
-          growthRate,
-          peakYear: peak.year,
-          dataPoints: t.yearlyCounts,
-          trendMessage: (t as any).trendMessage,
-          temporalConfidence: (t as any).temporalConfidence,
-          reliability: (t as any).reliability,
-          llmTrendSummary: (t as any).llm_trend_summary,
-          llmParadigmShifts: (t as any).llm_paradigm_shifts,
-          llmReliabilityExplanation: (t as any).llm_reliability_explanation,
-          llmConfidence: (t as any).llm_confidence,
-        };
-      })
-    : mockTrends.map(t => ({ ...t, dataPoints: t.dataPoints }));
+  // Get trends data with fallback handling
+  const getTrendsList = () => {
+    if (!br || !br.modules?.module4) return [];
+    const module4 = br.modules.module4 as any;
+    // Handle both 'trends' and 'module4_trends' property names
+    const trendsList = module4.trends || module4.module4_trends || [];
+    return Array.isArray(trendsList) ? trendsList : [];
+  };
+
+  const trends: DisplayTrend[] = getTrendsList().map((t: any, i: number) => {
+    const yearlyCounts = t.yearlyCounts || t.dataPoints || [];
+    const color = TOPIC_COLORS[i % TOPIC_COLORS.length];
+    const peak = yearlyCounts.length > 0
+      ? yearlyCounts.reduce((best: any, yc: any) => yc.count > best.count ? yc : best, yearlyCounts[0])
+      : { year: 0, count: 0 };
+    const maxC = yearlyCounts.length > 0 ? Math.max(...yearlyCounts.map((yc: any) => yc.count), 1) : 1;
+    const minC = yearlyCounts.length > 0 ? Math.min(...yearlyCounts.map((yc: any) => yc.count), 0) : 0;
+    const growthRate = maxC > 0 ? (maxC - minC) / maxC : 0;
+    return {
+      topicId: t.topicId || `topic-${i}`,
+      topicName: t.topicName || `Topic ${i + 1}`,
+      color,
+      trend: t.trend || 'insufficient_data',
+      growthRate,
+      peakYear: peak?.year || 0,
+      dataPoints: yearlyCounts,
+      trendMessage: (t as any).trendMessage,
+      temporalConfidence: (t as any).temporalConfidence,
+      reliability: (t as any).reliability,
+      llmTrendSummary: (t as any).llm_trend_summary,
+      llmParadigmShifts: (t as any).llm_paradigm_shifts,
+      llmReliabilityExplanation: (t as any).llm_reliability_explanation,
+      llmConfidence: (t as any).llm_confidence,
+    };
+  });
 
   const allYears = Array.from(new Set(trends.flatMap(t => t.dataPoints.map(d => d.year)))).sort();
   const maxCount = Math.max(...trends.flatMap(t => t.dataPoints.map(d => d.count)), 1);
@@ -88,7 +97,13 @@ export default function TrendAnalysisSection({ backendResult }: { backendResult?
         ))}
       </div>
 
-      {/* Per-topic bars */}
+      {/* Per-topic bars or empty state */}
+      {trends.length === 0 ? (
+        <div className="py-12 text-center text-sm text-gray-400">
+          <i className="ri-line-chart-line text-3xl text-gray-200 mb-2 block" />
+          No trend data available
+        </div>
+      ) : (
       <div className="space-y-4">
         {[...trends].sort((a, b) => b.growthRate - a.growthRate).map(topic => {
           const trend = TREND_CONFIG[topic.trend] ?? TREND_CONFIG.stable;
@@ -160,6 +175,7 @@ export default function TrendAnalysisSection({ backendResult }: { backendResult?
           );
         })}
       </div>
+      )}
     </section>
   );
 }

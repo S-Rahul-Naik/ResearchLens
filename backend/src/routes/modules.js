@@ -14,7 +14,18 @@ const { runModule8DatasetMethodMatrix } = require('../services/module8DatasetMet
 const { runModule9RelatedWorkDraft } = require('../services/module9RelatedWorkDraft');
 const { runModule10ScientificHonesty } = require('../services/module10ScientificHonesty');
 const { buildReportContext, generateAnalysisReport } = require('../services/ollamaBridge');
-const { callN8NFullAnalysis, formatN8NResults, checkN8NHealth } = require('../services/n8nBridge');
+const { callN8NFullAnalysis, formatN8NResults, checkN8NHealth, N8N_BASE_URL } = require('../services/n8nBridge');
+const Ajv = require('ajv');
+const addFormats = require('ajv-formats');
+const path = require('path');
+
+// Load and compile n8n final payload schema
+const schemaPath = path.join(__dirname, '..', 'services', 'schemas', 'n8n-final-payload.schema.json');
+const n8nFinalSchema = require(schemaPath);
+const ajv = new Ajv({ allErrors: true, strict: false });
+addFormats(ajv);
+const validateN8nFinal = ajv.compile(n8nFinalSchema);
+const axios = require('axios');
 const { protect } = require('../middleware/auth');
 const { extractKeywords } = require('../utils/text');
 const cloudinary = require('../services/cloudinary');
@@ -354,10 +365,10 @@ router.post('/modules/run-all', protect, async (req, res) => {
       paperIds: papers.map(p => p.id),
       paperCount: papers.length,
       yearRange,
-      reportTitle: analysisReport.report_title,
-      reportSummary: analysisReport.executive_summary,
-      reportMarkdown: analysisReport.report_markdown,
-      reportHighlights: analysisReport.key_findings || [],
+      reportTitle: analysisReport.reportTitle,
+      reportSummary: analysisReport.reportSummary,
+      reportMarkdown: analysisReport.reportMarkdown,
+      reportHighlights: analysisReport.reportHighlights || [],
       module1: m1,
       module2: m2,
       module3: m3,
@@ -412,6 +423,127 @@ router.post('/modules/n8n-analysis', protect, async (req, res) => {
     // Call N8N master workflow
     let n8nResult = await callN8NFullAnalysis(papers, question);
 
+    // If the n8nBridge marked this as an interim payload (no poll URL provided),
+    // create a placeholder report and return without publishing final modules.
+    if (n8nResult && n8nResult.interim) {
+      const placeholder = await AnalysisReport.create({
+        userId,
+        name: reportName,
+        paperIds: papers.map(p => p.id),
+        paperCount: papers.length,
+        yearRange: { start: null, end: null },
+        reportTitle: `N8N (interim) - ${reportName}`,
+        reportSummary: 'Processing (interim)',
+        module1: {}, module2: {}, module3: {}, module4: {}, module5: {}, module6: {}, module7: {}, module8: {}, module9: {}, module10: {},
+        rawN8nStages: [n8nResult.raw || n8nResult],
+        analysisType: 'n8n-full-analysis',
+      });
+
+      const runPlaceholder = {
+        id: `n8n-run-${Date.now()}`,
+        createdAt: new Date().toISOString(),
+        papersCount: papers.length,
+        analysisReport: { reportTitle: placeholder.name },
+        modulesInOrder: [],
+        modules: { analysisReport: {} },
+        reportId: placeholder._id,
+        processingTimeMs: Date.now() - startTime,
+        status: 'processing',
+      };
+
+      // Publish placeholder so frontend has a runId to poll; do not publish partial modules
+      addRun(runPlaceholder);
+      return res.json(runPlaceholder);
+    }
+
+    // If n8n returned an early 'processing' placeholder with pollUrl/executionId,
+    // create a placeholder AnalysisReport now (so frontend can show progress) and
+    // then continue polling in background to update the report when complete.
+    const isProcessing = String(n8nResult?.status || '').toLowerCase() === 'processing' || n8nResult?._httpStatus === 202;
+    const pollUrl = n8nResult?.pollUrl || n8nResult?.statusUrl || (n8nResult?.executionId ? `${N8N_BASE_URL}/api/v1/executions/${n8nResult.executionId}` : null);
+
+    if (isProcessing && pollUrl) {
+      // Create placeholder report immediately
+      const placeholder = await AnalysisReport.create({
+        userId,
+        name: reportName,
+        paperIds: papers.map(p => p.id),
+        paperCount: papers.length,
+        yearRange: { start: null, end: null },
+        reportTitle: `N8N (processing) - ${reportName}`,
+        reportSummary: 'Processing',
+        module1: {}, module2: {}, module3: {}, module4: {}, module5: {}, module6: {}, module7: {}, module8: {}, module9: {}, module10: {},
+        rawN8n: n8nResult,
+        analysisType: 'n8n-full-analysis',
+      });
+
+      // Start background poller (do not await)
+      (async function pollAndUpdate(reportId, pollTarget, papersLocal) {
+        try {
+          const maxRetries = Number(process.env.N8N_INCOMPLETE_RETRIES || 12);
+          const retryDelayMs = Number(process.env.N8N_INCOMPLETE_RETRY_DELAY_MS || 5000);
+          const headers = process.env.N8N_API_KEY ? { 'X-API-Key': process.env.N8N_API_KEY, Authorization: `Bearer ${process.env.N8N_API_KEY}` } : {};
+
+          for (let attempt = 1; attempt <= maxRetries; attempt += 1) {
+            await new Promise(r => setTimeout(r, retryDelayMs));
+            try {
+              const resp = await axios.get(pollTarget, { timeout: 30000, headers });
+              const pollData = resp?.data?.data || resp?.data || {};
+              const candidate = (pollData && typeof pollData === 'object') ? (pollData.result || pollData) : pollData;
+
+              const status = String(candidate?.status || '').toLowerCase();
+              const hasModules = candidate && (candidate.summarization || candidate.gapDetection || candidate.trendDetection || candidate.visualization);
+              if (candidate && status !== 'processing' && hasModules) {
+                // Format and update report
+                const formatted = formatN8NResults(candidate, papersLocal);
+                const { modules: mod, reportTitle: rt, reportSummary: rs, reportMarkdown: rm, reportHighlights: rh, confidence } = formatted;
+                await AnalysisReport.findByIdAndUpdate(reportId, {
+                  reportTitle: rt,
+                  reportSummary: rs,
+                  reportMarkdown: rm,
+                  reportHighlights: rh,
+                  module1: mod.module1 || {},
+                  module2: mod.module2 || {},
+                  module3: mod.module3 || {},
+                  module4: mod.module4 || {},
+                  module5: mod.module5 || {},
+                  module6: mod.module6 || {},
+                  module7: mod.module7 || {},
+                  module8: mod.module8 || {},
+                  module9: mod.module9 || {},
+                  module10: mod.module10 || {},
+                  rawN8n: candidate,
+                }, { new: true });
+                console.log(`[N8N] Background poll updated report ${reportId} on attempt ${attempt}`);
+                return;
+              }
+            } catch (pollErr) {
+              console.warn('[N8N] Background poll error:', pollErr.message);
+            }
+          }
+          console.warn(`[N8N] Background poll exhausted retries for report ${reportId}`);
+        } catch (bgErr) {
+          console.error('[N8N] Background poll fatal error:', bgErr.message);
+        }
+      }(placeholder._id.toString(), pollUrl, papers));
+
+      // Return the placeholder run object so frontend has a reportId to query later
+      const runPlaceholder = {
+        id: `n8n-run-${Date.now()}`,
+        createdAt: new Date().toISOString(),
+        papersCount: papers.length,
+        analysisReport: { reportTitle: placeholder.name },
+        modulesInOrder: [],
+        modules: { analysisReport: {} },
+        reportId: placeholder._id,
+        processingTimeMs: Date.now() - startTime,
+        status: 'processing',
+      };
+
+      addRun(runPlaceholder);
+      return res.json(runPlaceholder);
+    }
+
     // Format N8N results to match backend schema
     const formattedResult = formatN8NResults(n8nResult, papers);
     const { modules, reportTitle, reportSummary, reportMarkdown, reportHighlights, confidence } = formattedResult;
@@ -460,10 +592,10 @@ router.post('/modules/n8n-analysis', protect, async (req, res) => {
     });
 
     const analysisReport = {
-      report_title: reportTitle,
-      executive_summary: reportSummary,
-      report_markdown: reportMarkdown,
-      key_findings: reportHighlights,
+      reportTitle: reportTitle,
+      reportSummary: reportSummary,
+      reportMarkdown: reportMarkdown,
+      reportHighlights: reportHighlights,
       confidence,
     };
 
@@ -499,6 +631,92 @@ router.post('/modules/n8n-analysis', protect, async (req, res) => {
   } catch (error) {
     console.error('[N8N Analysis] Error:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// ── POST /api/n8n/create-report ── create an empty AnalysisReport to be filled by n8n module callbacks
+router.post('/n8n/create-report', async (req, res) => {
+  try {
+    // simple API key guard (optional)
+    const incomingKey = req.header('X-API-Key') || '';
+    if (process.env.N8N_API_KEY && process.env.N8N_API_KEY !== '' && incomingKey !== process.env.N8N_API_KEY) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const { userId, reportName, paperIds, paperCount, yearRange } = req.body || {};
+    const doc = await AnalysisReport.create({
+      userId: userId || null,
+      name: reportName || `N8N Report ${new Date().toISOString()}`,
+      paperIds: Array.isArray(paperIds) ? paperIds : [],
+      paperCount: Number(paperCount) || (Array.isArray(paperIds) ? paperIds.length : 0),
+      yearRange: yearRange || { start: null, end: null },
+    });
+
+    console.log('[N8N] Created report placeholder:', doc._id.toString());
+    return res.json({ success: true, reportId: doc._id.toString() });
+  } catch (err) {
+    console.error('[N8N] create-report error:', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /api/n8n/module-result ── receive per-module outputs from n8n and store/update the AnalysisReport
+router.post('/n8n/module-result', async (req, res) => {
+  try {
+    const incomingKey = req.header('X-API-Key') || '';
+    if (process.env.N8N_API_KEY && process.env.N8N_API_KEY !== '' && incomingKey !== process.env.N8N_API_KEY) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const { reportId, moduleName, payload } = req.body || {};
+    if (!reportId || !moduleName) {
+      return res.status(400).json({ error: 'reportId and moduleName are required' });
+    }
+
+    const report = await AnalysisReport.findById(reportId);
+    if (!report) return res.status(404).json({ error: 'Report not found' });
+
+    // Map moduleName to AnalysisReport field
+    const moduleMap = {
+      summarization: 'module1',
+      topicModeling: 'module2',
+      gapDetection: 'module3',
+      trendDetection: 'module4',
+      visualization: 'module5',
+      chatbot: 'module6',
+      contradictions: 'module7',
+      datasetMethodMatrix: 'module8',
+      relatedWork: 'module9',
+      scientificHonesty: 'module10',
+    };
+
+    const field = moduleMap[moduleName] || moduleMap[moduleName?.toLowerCase()] || null;
+    if (!field) {
+      console.warn('[N8N] Unknown moduleName received:', moduleName);
+    }
+
+    // Store raw payload in the appropriate module field (merge shallowly)
+    if (field) {
+      report[field] = payload;
+    } else {
+      // store in a fallback field for inspection
+      report[`n8n_extra_${moduleName}`] = payload;
+    }
+
+    await report.save();
+
+    // Log truncated output to backend terminal for visibility
+    try {
+      const small = JSON.stringify(payload).slice(0, 1000);
+      console.log(`[N8N][Module:${moduleName}] -> report ${reportId}:`, small);
+    } catch (e) {
+      console.log(`[N8N][Module:${moduleName}] -> report ${reportId}: (unable to stringify)`);
+    }
+
+    return res.json({ success: true, reportId });
+  } catch (err) {
+    console.error('[N8N] module-result error:', err.message);
+    return res.status(500).json({ error: err.message });
   }
 });
 
@@ -1035,6 +1253,261 @@ router.get('/reports/:reportId', protect, async (req, res) => {
     res.json(report);
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /api/modules/n8n-webhook ── Receive results from N8N workflow ────
+// This endpoint is called by N8N to POST analysis results back to the backend
+router.post('/modules/n8n-webhook', async (req, res) => {
+  try {
+    // n8n may send either an object or a single-item array; normalize to object.
+    const incomingPayload = Array.isArray(req.body) ? req.body[0] : req.body;
+    if (!incomingPayload || typeof incomingPayload !== 'object') {
+      return res.status(400).json({ error: 'Invalid payload. Expected object or single-item array.' });
+    }
+
+    const { 
+      userId,
+      reportName,
+      papers,
+      summarization,
+      gapDetection,
+      trendDetection,
+      visualization,
+      chatbot,
+      timestamp,
+      status,
+      stage,
+      isFinal,
+      apiLimitExceeded,
+      error
+    } = incomingPayload;
+
+    // Validate required fields
+    if (!userId || !reportName) {
+      return res.status(400).json({ error: 'userId and reportName are required' });
+    }
+
+    console.log('[N8N Webhook] Received results for report:', reportName);
+    console.log('[N8N Webhook] Payload:', JSON.stringify(incomingPayload, null, 2));
+
+    // Parse N8N results and map to modules
+    const modules = {
+      module1: summarization || { summaries: [] },
+      module2: gapDetection?.topics || { topics: [], assignments: [] },
+      module3: gapDetection || { gaps: [] },
+      module4: trendDetection || { trends: [] },
+      module5: visualization || { visualization: {} },
+      module6: chatbot || { gapEvidences: [] },
+      module7: { contradictions: [] }, // Module 7 not in workflow
+      module8: { matrix: {} }, // Module 8 not in workflow
+      module9: { relatedWork: [] }, // Module 9 not in workflow
+      module10: { honestyScore: 0.7 }, // Module 10 not in workflow
+    };
+
+    // Calculate metrics from results
+    const topicCount = Array.isArray(gapDetection?.topics) ? gapDetection.topics.length : 0;
+    const gapCount = Array.isArray(gapDetection?.gaps) ? gapDetection.gaps.length : 0;
+    const paperCount = Array.isArray(papers) ? papers.length : 0;
+
+    // Extract year range from papers
+    const yearRange = papers && papers.length > 0
+      ? {
+          start: Math.min(...papers.map(p => p.year || new Date().getFullYear())),
+          end: Math.max(...papers.map(p => p.year || new Date().getFullYear()))
+        }
+      : { start: new Date().getFullYear(), end: new Date().getFullYear() };
+
+    // Store interim stage in DB (append to rawN8nStages) and only publish final
+    // Determine if this payload looks like the final combined output.
+    // Prefer explicit `stage` or `isFinal` fields when available.
+    let looksFinal = false;
+    if (typeof isFinal === 'boolean') {
+      looksFinal = !!isFinal;
+    } else if (Number.isFinite(Number(stage))) {
+      const stageNum = Number(stage);
+      // Expect 4 stages total; only stage 4 is final
+      looksFinal = stageNum >= 4;
+    } else {
+      looksFinal = (
+        (gapDetection && Array.isArray(gapDetection.gaps) && gapDetection.gaps.length > 0)
+        || (trendDetection && (Array.isArray(trendDetection.module4_trends) && trendDetection.module4_trends.length > 0) || (Array.isArray(trendDetection.trends) && trendDetection.trends.length > 0))
+        || (visualization && ((visualization.module5 && (Array.isArray(visualization.module5.points) && visualization.module5.points.length > 0)) || (visualization.module5 && visualization.module5.gaps && visualization.module5.gaps.length > 0)))
+      );
+    }
+
+    // Try to find an existing placeholder report by report name + user (or by provided reportId)
+    let report = null;
+    if (incomingPayload.reportId) {
+      report = await AnalysisReport.findById(incomingPayload.reportId).exec();
+    }
+    if (!report) {
+      report = await AnalysisReport.findOne({ userId, name: reportName }).exec();
+    }
+
+    if (!report) {
+      // create placeholder (first stage)
+      report = await AnalysisReport.create({
+        userId,
+        name: reportName,
+        description: `Analysis placeholder created at ${new Date().toISOString()}`,
+        paperIds: papers ? papers.map(p => p.id || p.paperId) : [],
+        paperCount,
+        yearRange,
+        reportTitle: `Analysis Report - ${reportName}`,
+        reportSummary: summarization?.summary || 'Analysis in progress',
+        reportMarkdown: '',
+        reportHighlights: [],
+        module1: modules.module1 || {},
+        module2: modules.module2 || {},
+        module3: modules.module3 || {},
+        module4: modules.module4 || {},
+        module5: modules.module5 || {},
+        module6: modules.module6 || {},
+        module7: modules.module7 || {},
+        module8: modules.module8 || {},
+        module9: modules.module9 || {},
+        module10: modules.module10 || {},
+        topicCount,
+        gapCount,
+        qualityScore: 0.75,
+        honestyScore: 0.7,
+        reportConfidence: 0.8,
+        processingTimeMs: 0,
+        rawN8nStages: [incomingPayload],
+        isPublic: false,
+      });
+      console.log('[N8N Webhook] Created placeholder report:', report._id);
+    } else {
+      // Append this stage payload to rawN8nStages
+      const stages = Array.isArray(report.rawN8nStages) ? report.rawN8nStages : [];
+      stages.push(incomingPayload);
+      // Update modules on the report (keep latest partial modules)
+      report.module1 = modules.module1 || report.module1 || {};
+      report.module2 = modules.module2 || report.module2 || {};
+      report.module3 = modules.module3 || report.module3 || {};
+      report.module4 = modules.module4 || report.module4 || {};
+      report.module5 = modules.module5 || report.module5 || {};
+      report.module6 = modules.module6 || report.module6 || {};
+      report.rawN8nStages = stages;
+      report.reportSummary = summarization?.summary || report.reportSummary;
+      await report.save();
+      console.log('[N8N Webhook] Appended stage to report:', report._id);
+    }
+
+    // If there's an explicit API limit or error reported, mark the run as failed
+    if (apiLimitExceeded || status === 'failed' || error || (typeof incomingPayload?.error === 'string' && incomingPayload.error.toLowerCase().includes('rate'))) {
+      report.reportSummary = report.reportSummary || 'Processing failed';
+      report.reportMarkdown = report.reportMarkdown || '';
+      report.processingTimeMs = report.processingTimeMs || 0;
+      report.failed = true;
+      report.failureReason = apiLimitExceeded ? 'api_limit_exceeded' : (incomingPayload.error || 'n8n_error');
+      await report.save();
+
+      const failedRun = {
+        id: `n8n-run-${report._id}`,
+        createdAt: report.createdAt.toISOString(),
+        papersCount: paperCount,
+        analysisReport: {
+          reportTitle: report.reportTitle,
+          reportSummary: `Failed: ${report.failureReason}`,
+        },
+        modulesInOrder: [],
+        modules: { analysisReport: { reportTitle: report.reportTitle } },
+        reportId: report._id,
+        processingTimeMs: report.processingTimeMs || 0,
+        status: 'failed',
+      };
+
+      addRun(failedRun);
+      return res.json({ success: true, reportId: report._id, run: failedRun, message: 'Marked as failed due to API limits or error' });
+    }
+
+    // If this is not the final stage, return success but keep frontend loading
+    if (!looksFinal) {
+      return res.json({ success: true, interim: true, reportId: report._id, message: 'Interim n8n stage stored; waiting for final output' });
+    }
+
+    // Final stage: validate payload against schema, then format full results and update report + push to frontend
+    try {
+      // Validate final payload shape before formatting/publishing
+      const isValid = validateN8nFinal(incomingPayload);
+      if (!isValid) {
+        console.warn('[N8N Webhook] Final payload did not match final schema. Validation errors:', validateN8nFinal.errors);
+        // Append stage but do not publish; keep frontend loading until a schema-valid final arrives
+        return res.json({ success: true, interim: true, reportId: report._id, message: 'Final payload did not validate against expected schema; stored as interim', validationErrors: validateN8nFinal.errors });
+      }
+
+      // Use formatN8NResults to normalize and synthesize reportMarkdown if needed
+      const formatted = formatN8NResults(incomingPayload, papers || []);
+      const { modules: finalModules, reportTitle, reportSummary: finalSummary, reportMarkdown, reportHighlights, confidence, processingTimeMs } = formatted;
+
+      report.reportTitle = reportTitle || report.reportTitle;
+      report.reportSummary = finalSummary || report.reportSummary;
+      report.reportMarkdown = reportMarkdown || report.reportMarkdown || '';
+      report.reportHighlights = reportHighlights || report.reportHighlights || [];
+      report.module1 = finalModules.module1 || report.module1;
+      report.module2 = finalModules.module2 || report.module2;
+      report.module3 = finalModules.module3 || report.module3;
+      report.module4 = finalModules.module4 || report.module4;
+      report.module5 = finalModules.module5 || report.module5;
+      report.module6 = finalModules.module6 || report.module6;
+      report.module7 = finalModules.module7 || report.module7;
+      report.module8 = finalModules.module8 || report.module8;
+      report.module9 = finalModules.module9 || report.module9;
+      report.module10 = finalModules.module10 || report.module10;
+      report.reportConfidence = typeof confidence === 'number' ? confidence : report.reportConfidence;
+      report.processingTimeMs = processingTimeMs || report.processingTimeMs;
+      report.topicCount = finalModules.module2?.topics?.length || report.topicCount;
+      report.gapCount = finalModules.module3?.gaps?.length || report.gapCount;
+
+      await report.save();
+      console.log('[N8N Webhook] Final report updated:', report._id);
+
+      // Build run object for frontend (same shape used elsewhere)
+      const modulesInOrder = [
+        { moduleId: 1, name: 'Summarization', result: report.module1 },
+        { moduleId: 2, name: 'Gap Detection (with Topics)', result: report.module2 },
+        { moduleId: 3, name: 'Gap Detection', result: report.module3 },
+        { moduleId: 4, name: 'Trend Detection', result: report.module4 },
+        { moduleId: 5, name: 'Visualization', result: report.module5 },
+        { moduleId: 6, name: 'Chatbot', result: report.module6 },
+      ];
+
+      const analysisReport = {
+        reportTitle: report.reportTitle || `Analysis Report - ${reportName}`,
+        reportSummary: report.reportSummary || '',
+        reportMarkdown: report.reportMarkdown || '',
+        reportHighlights: report.reportHighlights || [],
+        confidence: report.reportConfidence || 0,
+      };
+
+      const run = {
+        id: `n8n-run-${report._id}`,
+        createdAt: report.createdAt.toISOString(),
+        papersCount: paperCount,
+        analysisReport,
+        modulesInOrder,
+        modules: {
+          ...finalModules,
+          analysisReport,
+        },
+        reportId: report._id,
+        processingTimeMs: report.processingTimeMs || 0,
+        status: 'completed',
+      };
+
+      // Publish run to in-memory store so frontend sees the completed run
+      addRun(run);
+
+      return res.json({ success: true, reportId: report._id, run, message: 'Final analysis stored and published' });
+    } catch (formatErr) {
+      console.error('[N8N Webhook] Final formatting error:', formatErr);
+      return res.status(500).json({ error: 'Final formatting failed', detail: formatErr.message });
+    }
+  } catch (error) {
+    console.error('[N8N Webhook] Error:', error);
+    res.status(500).json({ error: error.message, stack: process.env.NODE_ENV === 'development' ? error.stack : undefined });
   }
 });
 

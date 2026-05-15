@@ -203,7 +203,7 @@ export default function DatasetsSection({ onShowResults }: DatasetsSectionProps)
   const [selectedPaper, setSelectedPaper] = useState<Paper | null>(null);
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
   const [showPipeline, setShowPipeline] = useState(false);
-  const [selectedAnalysisType, setSelectedAnalysisType] = useState<'quick' | 'full'>('n8n');
+  const [selectedAnalysisType, setSelectedAnalysisType] = useState<'quick' | 'full' | 'n8n'>('n8n');
   const [latestRunData, setLatestRunData] = useState<(Omit<AnalysisRun, 'id' | 'timestamp'>) | null>(null);
   const [runName, setRunName] = useState('');
   const [processedTopics, setProcessedTopics] = useState<TopicResult[]>([]);
@@ -417,9 +417,9 @@ export default function DatasetsSection({ onShowResults }: DatasetsSectionProps)
 
   const handlePipelineComplete = useCallback((backendResult: RunAllResult | null) => {
     setShowPipeline(false);
-    const topics = backendResult?.modules.module2.topics ?? [];
-    const gaps = backendResult?.modules.module3.gaps ?? [];
-    const assignments = backendResult?.modules.module2.assignments ?? [];
+    const topics = backendResult?.modules?.module2?.topics ?? [];
+    const gaps = backendResult?.modules?.module3?.gaps ?? [];
+    const assignments = backendResult?.modules?.module2?.assignments ?? [];
     // Build paperId -> topicId[] map from backend assignments
     const paperTopicMap = new Map<string, string[]>();
     assignments.forEach(({ paperId, topicId }) => {

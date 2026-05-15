@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
-import type { BackendPaper, RunAllResult } from '../lib/api';
+import { normalizeRunAllResult, type BackendPaper, type RunAllResult } from '../lib/api';
 
 export interface AnalysisRun {
   id: string;
@@ -67,7 +67,12 @@ const SEED_HISTORY: AnalysisRun[] = [
 function load(): AnalysisRun[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw) as AnalysisRun[];
+    if (raw) {
+      return (JSON.parse(raw) as AnalysisRun[]).map((run) => ({
+        ...run,
+        backendResult: run.backendResult ? normalizeRunAllResult(run.backendResult) : run.backendResult,
+      }));
+    }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(SEED_HISTORY));
     return SEED_HISTORY;
   } catch {
@@ -92,6 +97,7 @@ export function useAnalysisHistory() {
     (run: Omit<AnalysisRun, 'id' | 'timestamp'>): AnalysisRun => {
       const entry: AnalysisRun = {
         ...run,
+        backendResult: run.backendResult ? normalizeRunAllResult(run.backendResult) : run.backendResult,
         id: `run_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
         timestamp: Date.now(),
       };

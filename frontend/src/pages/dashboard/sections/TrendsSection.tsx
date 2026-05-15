@@ -153,7 +153,7 @@ function TrendCard({ trend, allPapers, allGapTopicAIds, allGapTopicBIds, gapEvid
 
 export default function TrendsSection({ backendResult, papers: propPapers = [] }: { backendResult?: RunAllResult | null; papers?: BackendPaper[] }) {
   const trends: TopicTrend[] = useMemo(() => {
-    const raw = backendResult?.modules.module4.trends;
+    const raw = backendResult?.modules?.module4?.trends ?? [];
     if (raw && raw.length > 0) {
       return raw.map((t, i) => {
         const sorted = [...t.yearlyCounts].sort((a, b) => a.year - b.year);
@@ -165,9 +165,9 @@ export default function TrendsSection({ backendResult, papers: propPapers = [] }
   }, [backendResult]);
 
   const allPapers = useMemo(() => propPapers, [propPapers]);
-  const allGapTopicAIds = useMemo(() => backendResult?.modules.module3.gaps.map(g => g.topicA) ?? [], [backendResult]);
-  const allGapTopicBIds = useMemo(() => backendResult?.modules.module3.gaps.map(g => g.topicB) ?? [], [backendResult]);
-  const gapEvidencePaperIds = useMemo(() => backendResult?.modules.module3.gaps.flatMap(g => g.evidencePaperIds) ?? [], [backendResult]);
+  const allGapTopicAIds = useMemo(() => backendResult?.modules?.module3?.gaps?.map(g => g.topicA) ?? [], [backendResult]);
+  const allGapTopicBIds = useMemo(() => backendResult?.modules?.module3?.gaps?.map(g => g.topicB) ?? [], [backendResult]);
+  const gapEvidencePaperIds = useMemo(() => backendResult?.modules?.module3?.gaps?.flatMap(g => g.evidencePaperIds) ?? [], [backendResult]);
 
   const [filter, setFilter] = useState<'all' | 'rising' | 'stable' | 'declining' | 'insufficient_data'>('all');
   const filtered = filter === 'all' ? trends : trends.filter(t => t.trend === filter);

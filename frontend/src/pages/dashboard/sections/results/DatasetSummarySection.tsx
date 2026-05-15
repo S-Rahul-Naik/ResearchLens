@@ -3,11 +3,11 @@ import type { AnalysisRun } from '../../../../hooks/useAnalysisHistory';
 
 export default function DatasetSummarySection({ run }: { run?: AnalysisRun | null }) {
   const br = run?.backendResult;
-  const trends = br?.modules.module4.trends ?? [];
+  const trends = br?.modules?.module4?.trends ?? [];
   const papersCount = br?.papersCount ?? run?.papers ?? 0;
-  const topics = br?.modules.module2.topics ?? [];
+  const topics = br?.modules?.module2?.topics ?? [];
   const topicsCount = topics.length || (run?.topics ?? 0);
-  const gaps = br?.modules.module3.gaps ?? [];
+  const gaps = br?.modules?.module3?.gaps ?? [];
   const gapsCount = gaps.length || (run?.gaps ?? 0);
 
   const allYears = br

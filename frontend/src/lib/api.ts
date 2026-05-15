@@ -279,6 +279,35 @@ function handleUnauthorized(status: number): void {
   if (onUnauthorized) onUnauthorized();
 }
 
+function unwrapSingleItemArray<T>(value: T | T[]): T | T[] {
+  return Array.isArray(value) && value.length === 1 ? value[0] : value;
+}
+
+export function normalizeRunAllResult(raw: unknown): RunAllResult {
+  const value = unwrapSingleItemArray(raw as RunAllResult | RunAllResult[] | null | undefined) as any;
+  const modules = value?.modules ?? value ?? {};
+
+  return {
+    id: value?.id ?? `run_${Date.now()}`,
+    createdAt: value?.createdAt ?? new Date().toISOString(),
+    papersCount: Number(value?.papersCount ?? 0),
+    modulesInOrder: Array.isArray(value?.modulesInOrder) ? value.modulesInOrder : [],
+    analysisReport: value?.analysisReport,
+    modules: {
+      module1: modules.module1 ?? { module: 'module1-summarization', count: 0, summaries: [] },
+      module2: modules.module2 ?? { module: 'module2-topic-modeling', topics: [], assignments: [] },
+      module3: modules.module3 ?? { module: 'module3-gap-detection', formula: '', gaps: [] },
+      module4: modules.module4 ?? { module: 'module4-trend-detection', trends: [] },
+      module5: modules.module5 ?? { module: 'module5-visualization', map: { points: [], topicCenters: [], links: [] } },
+      module6: modules.module6 ?? { module: 'module6-chatbot', answer: '', citations: [] },
+      module7: modules.module7 ?? { module: 'module7-contradiction-detection', contradictions: [] },
+      module8: modules.module8 ?? { module: 'module8-dataset-method-matrix', datasets: [], methods: [], rows: [], matrix: [] },
+      module9: modules.module9 ?? { module: 'module9-related-work-draft', sections: [], draftMarkdown: '' },
+      module10: modules.module10 ?? { module: 'module10-scientific-honesty', honestyScore: 0, reliability: 0, scoreBreakdown: { topicConfidence: 0, topicLabelConfidence: 0, gapReliability: 0, trendReliability: 0, coverage: 0, gapEvidenceCoverage: 0, citationAvailability: 0, trendSufficiency: 0, mapSupport: 0 }, caveats: [], warningCount: 0, inspected: { paperCount: 0, topicCount: 0, gapCount: 0, trendCount: 0, insufficientTrendCount: 0 }, summary: '' },
+    },
+  };
+}
+
 // ─── Requests ─────────────────────────────────────────────
 
 async function post<T>(path: string, body: unknown, auth = false): Promise<T> {
@@ -426,7 +455,8 @@ export async function apiDeletePapers(paperIds: string[]): Promise<{ success: bo
 }
 
 export async function runAllModules(payload: RunAllPayload): Promise<RunAllResult> {
-  return post<RunAllResult>('/api/modules/run-all', payload, true);
+  const result = await post<RunAllResult>('/api/modules/run-all', payload, true);
+  return normalizeRunAllResult(result);
 }
 
 export async function quickAnalysisModules(payload: RunAllPayload): Promise<{ id: string; createdAt: string; papersCount: number; analysisReport: AnalysisReportResult; reportId: string; processingTimeMs: number }> {
@@ -434,7 +464,34 @@ export async function quickAnalysisModules(payload: RunAllPayload): Promise<{ id
 }
 
 export async function n8nAnalysisModules(payload: RunAllPayload): Promise<{ id: string; createdAt: string; papersCount: number; analysisReport: AnalysisReportResult; reportId: string; processingTimeMs: number }> {
-  return post<{ id: string; createdAt: string; papersCount: number; analysisReport: AnalysisReportResult; reportId: string; processingTimeMs: number }>('/api/modules/n8n-analysis', payload, true);
+  const startTime = Date.now();
+  
+  // Get userId from session/auth if available, or use 'anonymous'
+  const userId = localStorage.getItem('userId') || 'anonymous';
+  
+  // Transform RunAllPayload to N8NWebhookPayload
+  const n8nPayload: N8NWebhookPayload = {
+    userId,
+    reportName: payload.reportName || `Analysis Report — ${new Date().toLocaleDateString()}`,
+    papers: payload.papers,
+    question: payload.question || 'What are the key findings, research gaps and emerging topics?',
+  };
+  
+  try {
+    // Call backend which will invoke n8n, process the 4 outputs, store them, and return the run
+    const run = await post<{
+      id: string;
+      createdAt: string;
+      papersCount: number;
+      analysisReport: AnalysisReportResult;
+      reportId: string;
+      processingTimeMs: number;
+    }>('/api/modules/n8n-analysis', n8nPayload, true);
+    return run;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'N8N analysis failed';
+    throw new Error(`N8N Analysis Error: ${errorMessage}`);
+  }
 }
 
 export async function apiGetAnalysisReports(): Promise<{ count: number; reports: RunAllResult[] }> {
@@ -447,5 +504,46 @@ export async function apiGetAnalysisReport(reportId: string): Promise<RunAllResu
 
 export async function askChatbot(papers: BackendPaper[], question: string): Promise<ChatbotResult> {
   return post<ChatbotResult>('/api/modules/6-chatbot', { papers, question });
+}
+
+// ─── N8N Webhook Integration ──────────────────────────────────
+
+export interface N8NWebhookPayload {
+  userId: string;
+  reportName: string;
+  papers: BackendPaper[];
+  question?: string;
+}
+
+export interface N8NWebhookResponse {
+  success: boolean;
+  reportId: string;
+  message: string;
+  run?: RunAllResult;
+}
+
+/**
+ * Trigger N8N webhook directly from the frontend
+ * This POSTs to the N8N webhook URL configured in your environment
+ */
+export async function triggerN8NWebhook(payload: N8NWebhookPayload): Promise<any> {
+  const n8nWebhookUrl = import.meta.env.VITE_N8N_WEBHOOK_URL as string | undefined;
+  if (!n8nWebhookUrl) {
+    throw new Error('N8N webhook URL not configured. Set VITE_N8N_WEBHOOK_URL in .env.local');
+  }
+  
+  const response = await fetch(n8nWebhookUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(extractApiError(text, `N8N webhook failed (${response.status})`));
+  }
+  
+  // N8N responds with the merged result JSON from the workflow
+  return normalizeRunAllResult(await response.json());
 }
 

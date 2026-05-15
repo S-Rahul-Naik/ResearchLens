@@ -560,27 +560,27 @@ Generate ONLY valid JSON, no additional text.`;
   try {
     const result = await callOllama(prompt, { model, temperature: 0.45, timeout: 60000 });
     return {
-      report_title: result.report_title || context.reportName || 'ResearchLens Analysis Report',
-      executive_summary: result.executive_summary || '',
-      key_findings: Array.isArray(result.key_findings) ? result.key_findings.filter(Boolean) : [],
+      reportTitle: result.report_title || result.reportTitle || context.reportName || 'ResearchLens Analysis Report',
+      reportSummary: result.executive_summary || result.reportSummary || '',
+      reportHighlights: Array.isArray(result.key_findings) ? result.key_findings.filter(Boolean) : (Array.isArray(result.reportHighlights) ? result.reportHighlights : []),
       top_topics: Array.isArray(result.top_topics) ? result.top_topics.filter(Boolean) : [],
       top_gaps: Array.isArray(result.top_gaps) ? result.top_gaps.filter(Boolean) : [],
       trend_insights: Array.isArray(result.trend_insights) ? result.trend_insights.filter(Boolean) : [],
       scientific_honesty: result.scientific_honesty || '',
-      report_markdown: result.report_markdown || '',
+      reportMarkdown: result.report_markdown || result.reportMarkdown || '',
       confidence: typeof result.confidence === 'number' ? result.confidence : 0.5,
     };
   } catch (err) {
     console.warn('Analysis report generation failed:', err.message);
     return {
-      report_title: context.reportName || 'ResearchLens Analysis Report',
-      executive_summary: '',
-      key_findings: [],
+      reportTitle: context.reportName || 'ResearchLens Analysis Report',
+      reportSummary: '',
+      reportHighlights: [],
       top_topics: [],
       top_gaps: [],
       trend_insights: [],
       scientific_honesty: '',
-      report_markdown: '',
+      reportMarkdown: '',
       confidence: 0,
     };
   }

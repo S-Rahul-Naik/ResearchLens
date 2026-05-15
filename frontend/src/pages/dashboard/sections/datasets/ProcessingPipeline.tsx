@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import type { Paper } from '../../../../mocks/papers';
-import { runAllModules, quickAnalysisModules, n8nAnalysisModules, type RunAllResult } from '../../../../lib/api';
+import { runAllModules, quickAnalysisModules, n8nAnalysisModules, normalizeRunAllResult, type RunAllResult } from '../../../../lib/api';
 
 /* ─── Types ─────────────────────────────────────────────── */
 type StageStatus = 'waiting' | 'running' | 'done' | 'error';
@@ -186,7 +186,7 @@ function StageDot({ status, stage }: { status: StageStatus; stage: typeof STAGES
 interface Props {
   papers: Paper[];
   runName?: string;
-  analysisType?: 'quick' | 'full';
+  analysisType?: 'quick' | 'full' | 'n8n';
   onComplete: (result: RunAllResult | null) => void;
   onCancel: () => void;
 }
@@ -205,6 +205,7 @@ export default function ProcessingPipeline({ papers, runName, analysisType = 'fu
   const backendResultRef = useRef<RunAllResult | null>(null);
   const backendPromiseRef = useRef<Promise<RunAllResult | null> | null>(null);
   const apiCalledRef = useRef(false);
+  const completionHandledRef = useRef(false);
 
   const addLog = useCallback((text: string, level: LogEntry['level'] = 'info') => {
     setLog(prev => {
@@ -213,9 +214,19 @@ export default function ProcessingPipeline({ papers, runName, analysisType = 'fu
     });
   }, []);
 
+  const finishWithResult = useCallback((result: RunAllResult | null) => {
+    if (completionHandledRef.current) return;
+    completionHandledRef.current = true;
+    backendResultRef.current = result;
+    cancelRef.current = true;
+    setDone(true);
+    onComplete(result);
+  }, [onComplete]);
+
   /* ── Simulation ──────────────────────────────────────── */
   useEffect(() => {
     cancelRef.current = false;
+    completionHandledRef.current = false;
     startTimeRef.current = Date.now();
     const BATCH = 3;
     const STAGE_MS = [320, 480, 560, 440, 380];
@@ -245,8 +256,12 @@ export default function ProcessingPipeline({ papers, runName, analysisType = 'fu
       
       backendPromiseRef.current = analysisPromise
         .then((result: any) => {
-          backendResultRef.current = result as RunAllResult;
-          return result as RunAllResult;
+          const normalizedResult = normalizeRunAllResult(result);
+          backendResultRef.current = normalizedResult;
+          if (analysisType === 'n8n') {
+            finishWithResult(normalizedResult);
+          }
+          return normalizedResult;
         })
         .catch(() => {
           backendResultRef.current = null;
@@ -318,6 +333,9 @@ export default function ProcessingPipeline({ papers, runName, analysisType = 'fu
         addLog('Sending results to backend for final analysis…', 'info');
 
         const backendResult = await (backendPromiseRef.current ?? Promise.resolve(null));
+        if (analysisType === 'n8n' && completionHandledRef.current) {
+          return;
+        }
         if (backendResult) {
           const gapCount = (backendResult as any).modules?.module3?.gaps?.length ?? 0;
           const reportMsg = gapCount > 0 
@@ -332,7 +350,10 @@ export default function ProcessingPipeline({ papers, runName, analysisType = 'fu
           addLog('Backend analysis did not return a result.', 'warn');
         }
         setDone(true);
-        onComplete(backendResult);
+        if (!completionHandledRef.current) {
+          completionHandledRef.current = true;
+          onComplete(backendResult);
+        }
       }
     };
 

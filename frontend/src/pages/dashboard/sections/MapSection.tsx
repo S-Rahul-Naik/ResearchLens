@@ -35,7 +35,7 @@ export default function MapSection({ backendResult, papers: propPapers = [] }: {
   /* ── Adapt backend data ──────────────────────────── */
   const allTopics: AdaptedTopic[] = useMemo(() => {
     if (backendResult) {
-      return backendResult.modules.module2.topics.map((t, i) => ({
+      return (backendResult.modules?.module2?.topics ?? []).map((t, i) => ({
         id: t.topicId,
         name: t.name,
         color: TOPIC_COLORS[i % TOPIC_COLORS.length],
@@ -50,7 +50,7 @@ export default function MapSection({ backendResult, papers: propPapers = [] }: {
       const topicColorMap = new Map(allTopics.map(t => [t.id, t.color]));
       const topicNameMap = new Map(allTopics.map(t => [t.id, t.name]));
       const paperYearMap = new Map(propPapers.map(p => [p.id, p.year ?? 0]));
-      return backendResult.modules.module5.map.points.map(p => ({
+      return (backendResult.modules?.module5?.map?.points ?? []).map(p => ({
         paperId: p.paperId,
         topicId: p.topicId,
         topicName: topicNameMap.get(p.topicId) ?? p.topicId,
@@ -66,7 +66,7 @@ export default function MapSection({ backendResult, papers: propPapers = [] }: {
 
   const allGaps: AdaptedGap[] = useMemo(() => {
     if (backendResult) {
-      return backendResult.modules.module3.gaps
+      return (backendResult.modules?.module3?.gaps ?? [])
         .map(g => ({
           id: g.gapId,
           topicAId: g.topicA,

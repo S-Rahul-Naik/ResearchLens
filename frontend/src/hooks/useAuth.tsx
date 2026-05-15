@@ -30,6 +30,19 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+const fallbackAuthContext: AuthContextType = {
+  user: null,
+  isAuthenticated: false,
+  isAuthInitializing: false,
+  login: async () => ({ success: false, error: 'AuthProvider missing' }),
+  signup: async () => ({ success: false, error: 'AuthProvider missing' }),
+  updateProfile: async () => ({ success: false, error: 'AuthProvider missing' }),
+  uploadAvatar: async () => ({ success: false, error: 'AuthProvider missing' }),
+  updatePassword: async () => ({ success: false, error: 'AuthProvider missing' }),
+  logout: () => {},
+  setUser: () => {},
+};
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthInitializing, setIsAuthInitializing] = useState(true);
@@ -133,7 +146,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be used inside AuthProvider');
-  return ctx;
+  return ctx ?? fallbackAuthContext;
 }
 
