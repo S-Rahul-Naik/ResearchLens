@@ -41,7 +41,7 @@ Backend Saves to Database
         ↓
 Frontend Displays Results
         ↓
-User Sees Dashboard with 9 Sections
+User Sees Dashboard with 7 Sections
 ```
 
 **Why use N8N instead of running modules locally?**
@@ -247,80 +247,7 @@ Each module is like a specialist researcher focusing on one specific task:
 
 ---
 
-### **Module 7: Contradiction Detection** ⚠️
-**What it does:** Finds papers with conflicting conclusions
-
-**Simple analogy:** "Paper A says method X is best, but Paper B says method Y is better"
-
-**How it works:**
-1. Looks for papers in same topic with opposite claims
-2. Uses Ollama AI to identify contradictions
-3. Explains what the conflict is about
-
-**Results stored:**
-```javascript
-{
-  contradiction: {
-    paperId1: "paper_5",
-    paperId2: "paper_12",
-    claimA: "Model A achieves 95% accuracy",
-    claimB: "Model A only achieves 87% accuracy",
-    explanation: "Different datasets or evaluation metrics used"
-  }
-}
-```
-
----
-
-### **Module 8: Dataset-Method Matrix** 📋
-**What it does:** Creates a table showing which datasets are used with which methods
-
-**Simple analogy:** Like a spreadsheet showing "Machine Learning Method X has been tested on Datasets A, B, and C"
-
-**Results stored:**
-```javascript
-{
-  matrix: {
-    datasets: ["ImageNet", "COCO", "CIFAR-10"],
-    methods: ["CNN", "ResNet", "Vision Transformer"],
-    usage: {
-      "ImageNet": ["CNN", "ResNet"],
-      "COCO": ["CNN", "Vision Transformer"],
-      // ...
-    }
-  }
-}
-```
-
----
-
-### **Module 9: Related Work Draft** ✍️
-**What it does:** Automatically generates a "Related Work" section for a research paper
-
-**Simple analogy:** Like writing the background section of a paper that discusses all the papers you studied
-
-**How it works:**
-1. Groups papers by topic
-2. Orders them chronologically
-3. Uses Ollama AI to generate narrative paragraphs connecting them
-4. Creates a polished "Related Work" section
-
-**Results stored:**
-```javascript
-{
-  relatedWork: {
-    markdown: "# Related Work\n\n## Deep Learning Foundations\n...",
-    sections: [
-      { topic: "Deep Learning", papers: [...], narrative: "..." },
-      // ...
-    ]
-  }
-}
-```
-
----
-
-### **Module 10: Scientific Honesty Score** ✅
+### **Module 7: Scientific Honesty Score** ✅
 **What it does:** Analyzes if papers properly cite related work and avoid plagiarism
 
 **Simple analogy:** Like a teacher checking if a student properly cited all sources in their essay
@@ -342,9 +269,9 @@ Each module is like a specialist researcher focusing on one specific task:
 
 ---
 
-## 📊 The 9 Dashboard Sections (What You See)
+## 📊 The 7 Dashboard Sections (What You See)
 
-After all modules run, the frontend displays results in 9 sections:
+After all modules run, the frontend displays results in 7 sections:
 
 ### **Section 1: Dataset Summary** 📊
 **Location:** First section in results
@@ -393,7 +320,7 @@ This analysis of 145 papers in AI/ML research (2020-2024) identified
 
 1. Deep Learning is rising (68% more papers in 2024 vs 2020)
 2. Knowledge Graphs and NLP rarely collaborate (major gap)
-3. Contradiction detected: Different accuracy claims for ResNet
+3. Most papers follow solid research methodology with strong citations
 ```
 
 ---
@@ -506,7 +433,7 @@ Curved LINES between colors = topics are related
 - Examples:
   - "What are the top 3 gaps in this research?"
   - "Which topics are rising the fastest?"
-  - "Are there contradictions in the data?"
+  - "How good is the research methodology in this corpus?"
   - "What papers bridge gap #5?"
 
 **How it works:**
@@ -540,64 +467,6 @@ Issues Found: 2
   • Paper #5 claims not well cited
   • Paper #12 possible citation gap in literature review
 ```
-
----
-
-### **Section 8: Dataset-Method Matrix** 📋
-**Location:** Table showing method-dataset combinations
-
-**How to read it:**
-```
-           CNN  ResNet  Vision-T  Transformer
-ImageNet   ✓    ✓       ✓         
-COCO       ✓           ✓         ✓
-CIFAR-10   ✓    ✓               
-Pascal     ✓                      ✓
-```
-
-**What this means:**
-- ✓ = This method tested on this dataset
-- Empty = Never tested together (potential gap)
-- X marks show research coverage
-
-**Why it matters:**
-- Shows which combinations are well-researched
-- Highlights untested combinations (research opportunities)
-
----
-
-### **Section 9: Related Work Draft** ✍️
-**Location:** Auto-generated related work section
-
-**What it is:**
-- Ready-to-use content for your research paper
-- Organized by topic
-- Chronologically ordered papers
-- AI-generated narrative connecting them
-
-**Example structure:**
-```markdown
-# Related Work
-
-## Deep Learning Foundations (2020-2022)
-[3-4 papers grouped, narrative connecting them]
-
-Deep learning has emerged as a fundamental paradigm...
-[AI-generated text citing and explaining papers]
-
-## Knowledge Graphs and Semantic Understanding (2021-2024)
-[Papers organized chronologically]
-...
-
-## Emerging Trends: Multimodal AI (2023-2024)
-...
-```
-
-**How to use it:**
-1. Copy the entire section into your paper
-2. Review for accuracy (always verify AI-generated text!)
-3. Add your own insights
-4. Cite all papers properly
 
 ---
 
@@ -638,7 +507,7 @@ Backend sends papers to N8N webhook
 
 ### Step 3: Run All Modules
 ```
-N8N runs 10 modules in orchestrated workflow
+N8N runs 7 modules in orchestrated workflow
 │
 ├─> M1 summarizes each paper
 ├─> M2 groups papers into topics
@@ -646,10 +515,7 @@ N8N runs 10 modules in orchestrated workflow
 ├─> M4 tracks trends
 ├─> M5 creates visualization
 ├─> M6 finds bridge papers
-├─> M7 detects contradictions
-├─> M8 builds method-dataset matrix
-├─> M9 generates related work
-└─> M10 calculates honesty score
+└─> M7 calculates honesty score
 ```
 
 ### Step 4: Return Results
@@ -659,7 +525,7 @@ N8N formats all results
 └─> Sends back to backend
     └─> Backend saves to MongoDB
         └─> Returns to frontend
-            └─> Frontend displays 9 sections
+            └─> Frontend displays 7 sections
 ```
 
 ### Step 5: Save & History
@@ -696,21 +562,17 @@ Let's say you upload 100 AI research papers from 2020-2024:
 - ... (7 more)"
 
 **Module 3 Gaps:**
-"Found 34 significant gaps:
-- #1: Deep Learning & Knowledge Graphs (score: 0.85)
-  └─ Similar (0.72) but never appear together (0)
-- #2: NLP & Computer Vision (score: 0.78)
-  └─ Similar (0.68) but rarely together (1 paper)
-- #3: Reinforcement Learning & Knowledge Graphs (score: 0.72)
-... (31 more)"
+"Found 34 gaps:
+- ML × Knowledge Graphs (opportunity: 0.85)
+- NLP × Computer Vision (opportunity: 0.72)
+- ... (32 more)"
 
-**Module 4 Trends:**
-"Deep Learning is RISING (↗)
-- 2020: 8 papers
-- 2021: 15 papers
-- 2022: 22 papers
-- 2023: 28 papers
-- 2024: 35 papers
+**Module 4 Trend:**
+"Deep Learning: RISING ↗
+- 2020: 15 papers
+- 2021: 22 papers
+- 2022: 28 papers
+- 2023: 35 papers
 Growth rate: 45% per year"
 
 **Module 5 Map:**
@@ -719,10 +581,10 @@ Growth rate: 45% per year"
 - 12 colored clusters (topics)
 - 34 curved lines (gaps between topics)"
 
-**Module 10 Honesty:**
+**Module 7 Honesty:**
 "Average honesty score: 0.87
 - Most papers cite relevant work
-- Few contradictions found
+- Strong methodology in corpus
 - 2 papers have citation gaps"
 
 ### Dashboard Result:
@@ -732,6 +594,8 @@ Section 2: Summary of key findings
 Section 3: Top 10 gaps with explanations
 Section 4: Trend analysis (Deep Learning rising)
 Section 5: Interactive research map
+Section 6: Chatbot for asking questions
+Section 7: Research integrity metrics
 Section 6: Q&A about findings
 Section 7: Research integrity metrics
 Section 8: Which methods tested on which datasets
@@ -794,11 +658,10 @@ Section 9: Auto-generated related work section
 
 ### Literature Review:
 ```
-1. Go to Section 9 (Related Work Draft)
-2. Copy the auto-generated text
-3. Verify accuracy (always check AI output!)
-4. Expand with your own insights
-5. Cite properly
+1. Use the analysis results to find relevant papers
+2. Verify accuracy (always check AI output!)
+3. Expand with your own insights
+4. Cite properly
 ```
 
 ### Identifying Trends:
@@ -809,12 +672,12 @@ Section 9: Auto-generated related work section
 4. Position your work within the trend
 ```
 
-### Spotting Contradictions:
+### Spotting Research Integrity:
 ```
 1. Check Section 7 (Scientific Honesty)
-2. Review contradictions found
-3. Investigate why different results
-4. Resolve in your own research
+2. Review honesty scores
+3. Investigate methodology soundness
+4. Ensure proper citations in your own work
 ```
 
 ---
@@ -844,10 +707,7 @@ Section 9: Auto-generated related work section
     module4: { trends: [...] },
     module5: { map: { points: [...], links: [...] } },
     module6: { gapEvidences: [...] },
-    module7: { contradictions: [...] },
-    module8: { matrix: {...} },
-    module9: { relatedWork: {...} },
-    module10: { honestyScore: 0.87, ... }
+    module7: { honestyScore: 0.87, ... }
   },
   
   // Analysis report
@@ -878,9 +738,7 @@ ResultsSection.tsx
 ├─ Section 7: EvaluationSummarySection
 ├─ Section 8: DatasetMethodMatrixSection
 └─ Section 9: RelatedWorkDraftSection
-```
-
-Each section:
+└─ Section 7: EvaluationSummary
 1. Extracts data from backendResult.modules
 2. Transforms for display (normalization, filtering)
 3. Renders interactive UI
