@@ -191,36 +191,38 @@ def generate_system_architecture():
         "ResearchLens System Architecture",
         "Frontend dashboard, backend API, analysis modules, n8n orchestration, and persistence layer",
     )
+    # Increase vertical spacing and slightly reduce box heights to avoid overlap
+    user = (0.05, 0.78, 0.18, 0.11)
+    web = (0.30, 0.74, 0.20, 0.12)
+    api = (0.55, 0.70, 0.18, 0.15)
+    db = (0.82, 0.76, 0.12, 0.12)
+    n8n = (0.55, 0.46, 0.18, 0.14)
+    modules = (0.30, 0.32, 0.20, 0.14)
+    python = (0.05, 0.34, 0.18, 0.12)
+    llm = (0.82, 0.34, 0.12, 0.12)
 
-    user = (0.05, 0.74, 0.18, 0.12)
-    web = (0.30, 0.72, 0.20, 0.14)
-    api = (0.55, 0.70, 0.18, 0.18)
-    db = (0.82, 0.72, 0.12, 0.14)
-    n8n = (0.55, 0.42, 0.18, 0.16)
-    modules = (0.30, 0.38, 0.20, 0.20)
-    python = (0.05, 0.40, 0.18, 0.16)
-    llm = (0.82, 0.40, 0.12, 0.16)
-
+    # Use shorter descriptions and slightly smaller internal text to reduce crowding
     gradient_card(ax, *user, "Researcher Browser", "Start analyses", "", GRADIENTS["teal"])
-    gradient_card(ax, *web, "React + Vite UI", "Dashboard, results, export", "", GRADIENTS["blue"])
+    gradient_card(ax, *web, "React + Vite UI", "Dashboard & export", "", GRADIENTS["blue"])
     gradient_card(ax, *api, "Express Backend", "Auth, uploads, orchestration", "", GRADIENTS["green"])
-    gradient_card(ax, *db, "MongoDB", "Reports + corpus", "", GRADIENTS["amber"])
-    gradient_card(ax, *n8n, "n8n Workflow", "Workflow orchestration", "", GRADIENTS["purple"])
-    gradient_card(ax, *modules, "Analysis Modules", "Topics, gaps, trends, map", "", GRADIENTS["orange"])
-    gradient_card(ax, *python, "Python Services", "Topic/gap/trend helpers", "", GRADIENTS["slate"])
-    gradient_card(ax, *llm, "LLM Layer", "Ollama, Gemini, OpenAI", "", GRADIENTS["rose"])
+    gradient_card(ax, *db, "MongoDB", "Reports & corpus", "", GRADIENTS["amber"])
+    gradient_card(ax, *n8n, "n8n Workflow", "Orchestration & retries", "", GRADIENTS["purple"])
+    gradient_card(ax, *modules, "Analysis Modules", "Topics, gaps, trends", "", GRADIENTS["orange"])
+    gradient_card(ax, *python, "Python Services", "CLIs & helpers", "", GRADIENTS["slate"])
+    gradient_card(ax, *llm, "LLM Layer", "Ollama, Gemini", "", GRADIENTS["rose"])
 
+    # Clearer connector routing with reduced curvature where boxes are closer
     connect_boxes(ax, user, web, color=TEAL)
     connect_boxes(ax, web, api, color=BLUE)
     connect_boxes(ax, api, db, color=GREEN)
-    add_arrow(ax, (0.64, 0.70), (0.62, 0.58), color=PURPLE, rad=-0.18)
-    add_arrow(ax, (0.64, 0.70), (0.64, 0.58), color=ORANGE)
-    add_arrow(ax, (0.64, 0.58), (0.42, 0.58), color=ORANGE)
-    add_arrow(ax, (0.28, 0.43), (0.23, 0.43), color=SLATE)
+    add_arrow(ax, (0.64, 0.68), (0.62, 0.52), color=PURPLE, rad=-0.12)
+    add_arrow(ax, (0.64, 0.68), (0.64, 0.52), color=ORANGE)
+    add_arrow(ax, (0.64, 0.52), (0.42, 0.46), color=ORANGE)
+    add_arrow(ax, (0.28, 0.38), (0.22, 0.34), color=SLATE)
     connect_boxes(ax, n8n, llm, color=ROSE)
-    add_arrow(ax, (0.64, 0.70), (0.88, 0.72), color=AMBER, rad=0.0)
+    add_arrow(ax, (0.64, 0.70), (0.88, 0.76), color=AMBER, rad=0.08)
 
-    ax.text(0.05, 0.30, "Stored outputs: analysis runs, report markdown, paper subsets, and history", fontsize=10, color=MUTED)
+    ax.text(0.05, 0.22, "Stored outputs: analysis runs, report markdown, subsets, and history", fontsize=10, color=MUTED)
 
     save(fig, "system_architecture")
 
