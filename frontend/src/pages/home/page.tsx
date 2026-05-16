@@ -222,6 +222,91 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* N8N Workflow */}
+      <section className="py-20 lg:py-32">
+        <div className="w-full px-6 lg:px-12">
+          <div className="max-w-6xl mx-auto">
+            <div className="grid lg:grid-cols-[1.1fr_0.9fr] gap-16 items-center">
+              <div>
+                <div className="inline-flex items-center gap-2 px-4 py-2 mb-6 text-sm font-medium text-indigo-700 bg-indigo-50 rounded-full border border-indigo-100">
+                  <i className="ri-flow-chart text-indigo-600" />
+                  N8N Workflow Automation
+                </div>
+                <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-6">
+                  A visual workflow that coordinates every analysis step
+                </h2>
+                <p className="text-lg text-gray-600 mb-8 leading-relaxed">
+                  ResearchLens uses n8n to orchestrate the research pipeline from the moment you upload papers.
+                  The workflow triggers backend processing, fans out to the analysis modules, merges the outputs,
+                  and returns a single structured report your team can act on immediately.
+                </p>
+                <div className="space-y-4">
+                  {[
+                    'Webhook-triggered analysis starts as soon as papers are submitted',
+                    'Parallel backend modules handle summarization, gaps, topics, and charts',
+                    'Merged output is normalized into one result object for the dashboard',
+                    'Reusable automation keeps the research pipeline easy to extend and debug',
+                  ].map((point) => (
+                    <div key={point} className="flex items-start gap-3">
+                      <div className="w-5 h-5 flex items-center justify-center mt-0.5 flex-shrink-0">
+                        <i className="ri-checkbox-circle-fill text-indigo-500 text-lg" />
+                      </div>
+                      <span className="text-gray-700">{point}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="bg-gradient-to-br from-indigo-50 via-white to-emerald-50 rounded-3xl p-8 border border-gray-100 shadow-sm">
+                <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+                  <div className="flex items-center justify-between mb-6">
+                    <div>
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-[0.2em] mb-1">Workflow path</p>
+                      <h3 className="text-xl font-semibold text-gray-900">ResearchLens x n8n</h3>
+                    </div>
+                    <span className="px-3 py-1 text-xs font-semibold text-indigo-700 bg-indigo-50 rounded-full border border-indigo-100">Automated</span>
+                  </div>
+                  <div className="mb-6 rounded-2xl bg-gray-50 border border-gray-100 px-4 py-3 text-sm text-gray-700">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-semibold text-gray-900">Upload Papers</span>
+                      <span className="text-indigo-300">→</span>
+                      <span className="font-semibold text-gray-900">n8n Webhook</span>
+                      <span className="text-indigo-300">→</span>
+                      <span className="font-semibold text-gray-900">Analysis Modules</span>
+                      <span className="text-indigo-300">→</span>
+                      <span className="font-semibold text-gray-900">Unified Dashboard</span>
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    {[
+                      { step: '01', title: 'Paper upload', desc: 'Users submit PDFs and metadata through the dashboard.' },
+                      { step: '02', title: 'n8n trigger', desc: 'A webhook launches the orchestration workflow.' },
+                      { step: '03', title: 'Module fan-out', desc: 'Backend services process the analysis in parallel.' },
+                      { step: '04', title: 'Unified report', desc: 'Results are merged, normalized, and stored for the UI.' },
+                    ].map((item, index) => (
+                      <div key={item.step} className="flex gap-4 items-start">
+                        <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center font-bold text-sm flex-shrink-0">
+                          {item.step}
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h4 className="font-semibold text-gray-900">{item.title}</h4>
+                            {index < 3 && <span className="text-indigo-300">→</span>}
+                          </div>
+                          <p className="text-sm text-gray-600 leading-relaxed">{item.desc}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="mt-4 p-4 rounded-2xl bg-white/70 border border-indigo-100 text-sm text-gray-700 leading-relaxed">
+                  <strong className="text-gray-900">Why it matters:</strong> n8n makes the workflow transparent, repeatable, and easy to adapt when you add new analysis modules or external integrations.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* What is a Research Gap */}
       <section className="py-20 lg:py-32">
         <div className="w-full px-6 lg:px-12">

@@ -23,6 +23,7 @@ Output:
 from __future__ import annotations
 
 import math
+import textwrap
 from pathlib import Path
 from typing import Iterable, Sequence
 
@@ -63,8 +64,10 @@ GRADIENTS = {
 }
 
 
-def make_canvas(title: str, subtitle: str | None = None):
-    fig, ax = plt.subplots(figsize=(14, 9), dpi=180)
+def make_canvas(title: str, subtitle: str | None = None, *, landscape: bool = True):
+    # A4 sizes in inches
+    figsize = (11.69, 8.27) if landscape else (8.27, 11.69)
+    fig, ax = plt.subplots(figsize=figsize, dpi=220)
     fig.patch.set_facecolor(BG)
     ax.set_facecolor(BG)
     ax.set_xlim(0, 1)
@@ -109,7 +112,8 @@ def add_box(ax, x: float, y: float, w: float, h: float, text: str, *, fc=CARD, e
     ax.add_patch(patch)
     ha = "center" if align == "center" else "left"
     tx = x + w / 2 if align == "center" else x + 0.02
-    ax.text(tx, y + h / 2, text, ha=ha, va="center", fontsize=fontsize, color=color, fontweight=weight, wrap=True, zorder=3)
+    wrapped = wrap_text_for_box(text, w, fontsize)
+    ax.text(tx, y + h / 2, wrapped, ha=ha, va="center", fontsize=fontsize, color=color, fontweight=weight, zorder=3)
     return patch
 
 
@@ -151,13 +155,35 @@ def labeled_step(ax, x: float, y: float, w: float, h: float, title: str, desc: s
 def gradient_card(ax, x: float, y: float, w: float, h: float, title: str, desc: str, accent: str, palette: tuple[str, str, str]):
     top, mid, edge = palette
     add_box(ax, x, y, w, h, "", fc=top, ec=edge, shadow=True)
-    ax.add_patch(FancyBboxPatch((x, y + h - 0.035), w, 0.035, boxstyle="round,pad=0.01,rounding_size=0.02",
+    if h < 0.1:
+        # Compact node mode for tiny boxes to avoid text overlap.
+        label = wrap_text_for_box(title, w, 9)
+        ax.text(x + w / 2, y + h / 2, label, ha="center", va="center", fontsize=8.8, fontweight="bold", color=TEXT, zorder=3)
+        return
+
+    header_h = min(0.035, h * 0.28)
+    ax.add_patch(FancyBboxPatch((x, y + h - header_h), w, header_h, boxstyle="round,pad=0.01,rounding_size=0.02",
                                 linewidth=0, facecolor=mid, alpha=0.96, zorder=2.1))
-    ax.text(x + 0.02, y + h - 0.058, title, ha="left", va="top", fontsize=11.5, fontweight="bold", color=TEXT, zorder=3)
+    ax.text(x + 0.02, y + h - (header_h + 0.012), wrap_text_for_box(title, w - 0.04, 10), ha="left", va="top", fontsize=9.8, fontweight="bold", color=TEXT, zorder=3)
     if desc:
-        ax.text(x + 0.02, y + h - 0.105, desc, ha="left", va="top", fontsize=9, color=MUTED, wrap=True, zorder=3)
-    if accent:
-        ax.text(x + w - 0.02, y + 0.03, accent, ha="right", va="bottom", fontsize=8.2, color=edge, fontweight="bold", zorder=3)
+        wrapped_desc = wrap_text_for_box(desc, w - 0.04, 9)
+        max_lines = 3 if h >= 0.18 else 2
+        desc_lines = wrapped_desc.splitlines()
+        if len(desc_lines) > max_lines:
+            trimmed = desc_lines[:max_lines]
+            trimmed[-1] = trimmed[-1].rstrip(" .") + "..."
+            wrapped_desc = "\n".join(trimmed)
+        ax.text(x + 0.02, y + h - (header_h + 0.05), wrapped_desc, ha="left", va="top", fontsize=8.5, color=MUTED, zorder=3)
+
+
+def wrap_text_for_box(text: str, width: float, font_size: int) -> str:
+    if not text:
+        return ""
+    if "\n" in text:
+        return "\n".join(wrap_text_for_box(part, width, font_size) for part in text.split("\n"))
+    # Approximate character budget from box width in axis units.
+    chars = max(12, int(width * 95))
+    return textwrap.fill(text, width=chars, break_long_words=False, break_on_hyphens=False)
 
 
 def generate_system_architecture():
@@ -175,26 +201,25 @@ def generate_system_architecture():
     python = (0.05, 0.40, 0.18, 0.16)
     llm = (0.82, 0.40, 0.12, 0.16)
 
-    gradient_card(ax, *user, "Researcher Browser", "Starts analysis and reviews results", "input", GRADIENTS["teal"])
-    gradient_card(ax, *web, "React + Vite UI", "Dashboard, results, export, and history", "frontend", GRADIENTS["blue"])
-    gradient_card(ax, *api, "Express Backend", "Auth, uploads, selection, run orchestration", "api", GRADIENTS["green"])
-    gradient_card(ax, *db, "MongoDB", "Analysis reports and corpus storage", "store", GRADIENTS["amber"])
-    gradient_card(ax, *n8n, "n8n Workflow", "Orchestration engine and webhook bridge", "automation", GRADIENTS["purple"])
-    gradient_card(ax, *modules, "Analysis Modules", "Summaries, topics, gaps, trends, map", "pipeline", GRADIENTS["orange"])
-    gradient_card(ax, *python, "Python Services", "Topic / gap / trend helpers", "helpers", GRADIENTS["slate"])
-    gradient_card(ax, *llm, "LLM Layer", "Ollama / Gemini / OpenAI", "models", GRADIENTS["rose"])
+    gradient_card(ax, *user, "Researcher Browser", "Start analyses", "", GRADIENTS["teal"])
+    gradient_card(ax, *web, "React + Vite UI", "Dashboard, results, export", "", GRADIENTS["blue"])
+    gradient_card(ax, *api, "Express Backend", "Auth, uploads, orchestration", "", GRADIENTS["green"])
+    gradient_card(ax, *db, "MongoDB", "Reports + corpus", "", GRADIENTS["amber"])
+    gradient_card(ax, *n8n, "n8n Workflow", "Workflow orchestration", "", GRADIENTS["purple"])
+    gradient_card(ax, *modules, "Analysis Modules", "Topics, gaps, trends, map", "", GRADIENTS["orange"])
+    gradient_card(ax, *python, "Python Services", "Topic/gap/trend helpers", "", GRADIENTS["slate"])
+    gradient_card(ax, *llm, "LLM Layer", "Ollama, Gemini, OpenAI", "", GRADIENTS["rose"])
 
     connect_boxes(ax, user, web, color=TEAL)
     connect_boxes(ax, web, api, color=BLUE)
     connect_boxes(ax, api, db, color=GREEN)
-    connect_boxes(ax, api, n8n, color=PURPLE, rad=-0.2)
-    connect_boxes(ax, api, modules, color=ORANGE, rad=0.18)
-    connect_boxes(ax, modules, python, color=SLATE)
+    add_arrow(ax, (0.64, 0.70), (0.62, 0.58), color=PURPLE, rad=-0.18)
+    add_arrow(ax, (0.64, 0.70), (0.64, 0.58), color=ORANGE)
+    add_arrow(ax, (0.64, 0.58), (0.42, 0.58), color=ORANGE)
+    add_arrow(ax, (0.28, 0.43), (0.23, 0.43), color=SLATE)
     connect_boxes(ax, n8n, llm, color=ROSE)
     add_arrow(ax, (0.64, 0.70), (0.88, 0.72), color=AMBER, rad=0.0)
 
-    ax.text(0.31, 0.61, "UI requests analysis, shows latest run, and renders exports", fontsize=10, color=MUTED)
-    ax.text(0.56, 0.60, "Backend validates selection, routes to local or n8n pipeline", fontsize=10, color=MUTED)
     ax.text(0.05, 0.30, "Stored outputs: analysis runs, report markdown, paper subsets, and history", fontsize=10, color=MUTED)
 
     save(fig, "system_architecture")
@@ -207,30 +232,29 @@ def generate_data_flow():
     )
 
     steps = [
-        ("Upload PDFs / JSON", "corpus ingestion", 0.05, 0.68, TEAL),
-        ("Select papers", "user picks run subset", 0.25, 0.68, BLUE),
-        ("Run analysis", "backend validates selection", 0.45, 0.68, PURPLE),
-        ("n8n / local modules", "summaries, topics, gaps, trends", 0.66, 0.68, ORANGE),
-        ("Analysis report", "MongoDB + run history", 0.82, 0.68, GREEN),
-        ("Overview / Results", "latest run rendering", 0.45, 0.30, AMBER),
+        ("Upload PDFs / JSON", "corpus ingestion", 0.06, 0.70, TEAL),
+        ("Select papers", "run subset", 0.37, 0.70, BLUE),
+        ("Run analysis", "selection validated", 0.68, 0.70, PURPLE),
+        ("n8n / local modules", "topics, gaps, trends", 0.20, 0.42, ORANGE),
+        ("Analysis report", "MongoDB + history", 0.56, 0.42, GREEN),
+        ("Overview / Results", "latest run", 0.37, 0.20, AMBER),
     ]
 
     boxes = {}
     for title, desc, x, y, color in steps:
-        boxes[title] = (x, y, 0.16, 0.12)
+        boxes[title] = (x, y, 0.24, 0.12)
         palette = GRADIENTS["teal"] if color == TEAL else GRADIENTS["blue"] if color == BLUE else GRADIENTS["purple"] if color == PURPLE else GRADIENTS["orange"] if color == ORANGE else GRADIENTS["green"] if color == GREEN else GRADIENTS["amber"]
-        gradient_card(ax, x, y, 0.16, 0.12, title, desc, title.lower(), palette)
+        gradient_card(ax, x, y, 0.24, 0.12, title, desc, "", palette)
 
-    for left, right in [(steps[i][0], steps[i + 1][0]) for i in range(4)]:
-        connect_boxes(ax, boxes[left], boxes[right], color=SLATE)
-    add_arrow(ax, (0.53, 0.68), (0.53, 0.42), color=AMBER)
-    add_arrow(ax, (0.74, 0.68), (0.53, 0.42), color=GREEN, rad=-0.1)
-    add_arrow(ax, (0.90, 0.68), (0.53, 0.42), color=PURPLE, rad=-0.15)
-
-    ax.text(0.07, 0.54, "Important rule: dataset count ≠ processed run count", fontsize=12, fontweight="bold", color=TEXT)
-    ax.text(0.07, 0.49, "All downstream views should read from the latest run object, not from the raw corpus.", fontsize=10, color=MUTED)
-    gradient_card(ax, 0.39, 0.15, 0.22, 0.12, "Latest run", "This is what Overview and Results should render", "truth source", GRADIENTS["amber"])
-    add_arrow(ax, (0.50, 0.27), (0.50, 0.24), color=AMBER)
+    connect_boxes(ax, boxes["Upload PDFs / JSON"], boxes["Select papers"], color=SLATE)
+    connect_boxes(ax, boxes["Select papers"], boxes["Run analysis"], color=SLATE)
+    add_arrow(ax, (0.80, 0.70), (0.80, 0.56), color=ORANGE)
+    add_arrow(ax, (0.80, 0.56), (0.32, 0.50), color=ORANGE)
+    connect_boxes(ax, boxes["n8n / local modules"], boxes["Analysis report"], color=SLATE)
+    add_arrow(ax, (0.68, 0.42), (0.49, 0.32), color=GREEN, rad=-0.1)
+    add_arrow(ax, (0.32, 0.42), (0.49, 0.32), color=AMBER, rad=0.1)
+    gradient_card(ax, 0.34, 0.05, 0.32, 0.11, "Latest run", "source for overview/results", "", GRADIENTS["amber"])
+    add_arrow(ax, (0.50, 0.20), (0.50, 0.16), color=AMBER)
 
     save(fig, "data_flow")
 
@@ -248,28 +272,35 @@ def generate_workflow_orchestration():
         ("4", "Trend Detection", ORANGE),
         ("5", "Visualization", CYAN),
         ("6", "Chatbot", AMBER),
-        ("7", "Contradictions", ROSE),
-        ("8", "Method Matrix", GREEN),
-        ("9", "Related Work", SLATE),
+        ("7", "Evidence Linking", ROSE),
+        ("8", "Report Synthesis", GREEN),
+        ("9", "Result Packaging", SLATE),
         ("10", "Scientific Honesty", "#1d4ed8"),
     ]
 
-    x0, y, w, h, gap = 0.03, 0.64, 0.084, 0.12, 0.008
+    x0, y1, y2, w, h, gap = 0.08, 0.67, 0.52, 0.15, 0.10, 0.03
     boxes = []
     for idx, (num, label, color) in enumerate(names):
-        x = x0 + idx * (w + gap)
-        add_box(ax, x, y, w, h, f"{num}\n{label}", fc="#ffffff", ec=color, fontsize=8.8, weight="bold")
+        row = 0 if idx < 5 else 1
+        x = x0 + (idx % 5) * (w + gap)
+        y = y1 if row == 0 else y2
+        add_box(ax, x, y, w, h, f"{num}\n{label}", fc="#ffffff", ec=color, fontsize=10, weight="bold")
         boxes.append((x, y, w, h))
-        if idx < len(names) - 1:
+        if idx < 4:
+            add_arrow(ax, (x + w, y + h / 2), (x + w + gap, y + h / 2), color=SLATE)
+        if 5 <= idx < 9:
             add_arrow(ax, (x + w, y + h / 2), (x + w + gap, y + h / 2), color=SLATE)
 
-    ax.text(0.05, 0.44, "Input: selected papers + question", fontsize=12, color=TEXT, fontweight="bold")
-    gradient_card(ax, 0.05, 0.18, 0.26, 0.18, "n8n master workflow", "Webhooks, retries, and result normalization", "automation", GRADIENTS["purple"])
-    gradient_card(ax, 0.37, 0.18, 0.26, 0.18, "Backend formatter", "Saves report, merges evidence, updates history", "storage", GRADIENTS["green"])
-    gradient_card(ax, 0.69, 0.18, 0.26, 0.18, "Frontend views", "Overview, Results, History, Export", "ui", GRADIENTS["blue"])
-    add_arrow(ax, (0.18, 0.44), (0.18, 0.36), color=PURPLE)
-    add_arrow(ax, (0.50, 0.36), (0.50, 0.30), color=GREEN)
-    add_arrow(ax, (0.82, 0.36), (0.82, 0.30), color=BLUE)
+    # Connector between row 1 and row 2
+    add_arrow(ax, (0.89, y1 + h / 2), (0.89, y2 + h / 2), color=SLATE)
+
+    ax.text(0.05, 0.40, "Input: selected papers + question", fontsize=12, color=TEXT, fontweight="bold")
+    gradient_card(ax, 0.06, 0.12, 0.26, 0.20, "n8n master workflow", "Webhooks, retries, normalization", "automation", GRADIENTS["purple"])
+    gradient_card(ax, 0.37, 0.12, 0.26, 0.20, "Backend formatter", "Save report and merge evidence", "storage", GRADIENTS["green"])
+    gradient_card(ax, 0.68, 0.12, 0.26, 0.20, "Frontend views", "Overview, Results, History, Export", "ui", GRADIENTS["blue"])
+    add_arrow(ax, (0.18, 0.40), (0.18, 0.32), color=PURPLE)
+    add_arrow(ax, (0.50, 0.32), (0.50, 0.24), color=GREEN)
+    add_arrow(ax, (0.81, 0.32), (0.81, 0.24), color=BLUE)
 
     save(fig, "workflow_orchestration")
 
@@ -287,20 +318,20 @@ def generate_topic_modeling_workflow():
         "Cluster": (0.63, 0.72, 0.16, 0.12),
         "Label": (0.82, 0.72, 0.12, 0.12),
     }
-    gradient_card(ax, *boxes["Input"], "Paper text", "abstract + content", "input", GRADIENTS["teal"])
-    gradient_card(ax, *boxes["Preprocess"], "Clean & tokenize", "remove noise", "prep", GRADIENTS["blue"])
-    gradient_card(ax, *boxes["Embed"], "Embeddings", "semantic vectors", "encode", GRADIENTS["rose"])
-    gradient_card(ax, *boxes["Cluster"], "BERTopic / clustering", "group by theme", "cluster", GRADIENTS["purple"])
-    gradient_card(ax, *boxes["Label"], "LLM label", "human-readable topic", "label", GRADIENTS["amber"])
+    gradient_card(ax, *boxes["Input"], "Paper text", "abstract + content", "", GRADIENTS["teal"])
+    gradient_card(ax, *boxes["Preprocess"], "Clean & tokenize", "remove noise", "", GRADIENTS["blue"])
+    gradient_card(ax, *boxes["Embed"], "Embeddings", "semantic vectors", "", GRADIENTS["rose"])
+    gradient_card(ax, *boxes["Cluster"], "BERTopic / clustering", "group by theme", "", GRADIENTS["purple"])
+    gradient_card(ax, *boxes["Label"], "LLM label", "human-readable topic", "", GRADIENTS["amber"])
 
     connect_boxes(ax, boxes["Input"], boxes["Preprocess"], color=BLUE)
     connect_boxes(ax, boxes["Preprocess"], boxes["Embed"], color=ROSE)
     connect_boxes(ax, boxes["Embed"], boxes["Cluster"], color=PURPLE)
     connect_boxes(ax, boxes["Cluster"], boxes["Label"], color=AMBER)
 
-    gradient_card(ax, 0.08, 0.34, 0.24, 0.18, "Topic embeddings", "Reduce papers into semantic vectors", "embeddings", GRADIENTS["teal"])
-    gradient_card(ax, 0.38, 0.34, 0.24, 0.18, "Topic clusters", "Group related papers by theme", "clusters", GRADIENTS["purple"])
-    gradient_card(ax, 0.68, 0.34, 0.24, 0.18, "Topic cards", "Name, keywords, coherence, paper counts", "cards", GRADIENTS["green"])
+    gradient_card(ax, 0.08, 0.34, 0.24, 0.18, "Topic embeddings", "Reduce papers into semantic vectors", "", GRADIENTS["teal"])
+    gradient_card(ax, 0.38, 0.34, 0.24, 0.18, "Topic clusters", "Group related papers by theme", "", GRADIENTS["purple"])
+    gradient_card(ax, 0.68, 0.34, 0.24, 0.18, "Topic cards", "Name, keywords, coherence, paper counts", "", GRADIENTS["green"])
     add_arrow(ax, (0.20, 0.34), (0.38, 0.34), color=SLATE)
     add_arrow(ax, (0.62, 0.43), (0.68, 0.43), color=SLATE)
 
@@ -323,13 +354,13 @@ def generate_keyword_extraction_workflow():
     boxes = []
     for x, y, w, h, label, color in stages:
         palette = GRADIENTS["teal"] if color == TEAL else GRADIENTS["blue"] if color == BLUE else GRADIENTS["purple"] if color == PURPLE else GRADIENTS["orange"] if color == ORANGE else GRADIENTS["green"]
-        gradient_card(ax, x, y, w, h, label, "", label.lower(), palette)
+        gradient_card(ax, x, y, w, h, label, "", "", palette)
         boxes.append((x, y, w, h))
     for a, b in zip(boxes, boxes[1:]):
         connect_boxes(ax, a, b, color=SLATE)
 
-    gradient_card(ax, 0.08, 0.36, 0.36, 0.18, "Keyword ranking", "Rank high-signal words from title, abstract, and content", "ranking", GRADIENTS["blue"])
-    gradient_card(ax, 0.54, 0.36, 0.38, 0.18, "ResearchLens output", "Keywords enrich summaries, topics, and search filters", "output", GRADIENTS["green"])
+    gradient_card(ax, 0.08, 0.36, 0.36, 0.18, "Keyword ranking", "Rank high-signal words from title, abstract, and content", "", GRADIENTS["blue"])
+    gradient_card(ax, 0.54, 0.36, 0.38, 0.18, "ResearchLens output", "Keywords enrich summaries, topics, and search filters", "", GRADIENTS["green"])
     add_arrow(ax, (0.44, 0.36), (0.54, 0.36), color=GREEN)
 
     ax.text(0.08, 0.16, "Typical scoring strategies: frequency, TF-IDF, noun phrases, and LLM-assisted refinement", fontsize=11, color=MUTED)
@@ -360,13 +391,13 @@ def generate_chatbot_workflow():
     for key, title, color in labels:
         x, y, w, h = nodes[key]
         palette = GRADIENTS["teal"] if color == TEAL else GRADIENTS["blue"] if color == BLUE else GRADIENTS["purple"] if color == PURPLE else GRADIENTS["orange"] if color == ORANGE else GRADIENTS["rose"]
-        gradient_card(ax, x, y, w, h, title, "", title.lower(), palette)
+        gradient_card(ax, x, y, w, h, title, "", "", palette)
     for a, b in zip(list(nodes.values()), list(nodes.values())[1:]):
         connect_boxes(ax, a, b, color=SLATE)
 
-    gradient_card(ax, 0.06, 0.32, 0.28, 0.20, "Evidence sources", "Backend papers, topics, gaps, trends", "ground truth", GRADIENTS["purple"])
-    gradient_card(ax, 0.37, 0.32, 0.28, 0.20, "RAG context", "Relevant snippets are assembled before generation", "retrieval", GRADIENTS["orange"])
-    gradient_card(ax, 0.68, 0.32, 0.26, 0.20, "Answer", "Concise response with links to evidence", "response", GRADIENTS["green"])
+    gradient_card(ax, 0.06, 0.32, 0.28, 0.20, "Evidence sources", "Backend papers, topics, gaps, trends", "", GRADIENTS["purple"])
+    gradient_card(ax, 0.37, 0.32, 0.28, 0.20, "RAG context", "Relevant snippets are assembled before generation", "", GRADIENTS["orange"])
+    gradient_card(ax, 0.68, 0.32, 0.26, 0.20, "Answer", "Concise response with links to evidence", "", GRADIENTS["green"])
     add_arrow(ax, (0.34, 0.34), (0.39, 0.34), color=ORANGE)
     add_arrow(ax, (0.65, 0.34), (0.70, 0.34), color=GREEN)
 
@@ -422,8 +453,7 @@ def generate_keyword_extraction_analysis_graph():
         (0.82, 0.70, "self-supervised", GREEN),
     ]
     for x, y, label, color in keywords:
-        palette = GRADIENTS["teal"] if color == TEAL else GRADIENTS["blue"] if color == BLUE else GRADIENTS["purple"] if color == PURPLE else GRADIENTS["orange"] if color == ORANGE else GRADIENTS["green"]
-        gradient_card(ax, x - 0.055, y - 0.028, 0.11, 0.056, label, "", label[:4], palette)
+        add_box(ax, x - 0.075, y - 0.03, 0.15, 0.06, label, fc="#ffffff", ec=color, fontsize=8.6, weight="bold")
 
     graph_nodes = [
         (0.18, 0.44, "paper 1", TEAL),
@@ -432,8 +462,7 @@ def generate_keyword_extraction_analysis_graph():
         (0.78, 0.44, "paper 4", ORANGE),
     ]
     for x, y, label, color in graph_nodes:
-        palette = GRADIENTS["teal"] if color == TEAL else GRADIENTS["blue"] if color == BLUE else GRADIENTS["purple"] if color == PURPLE else GRADIENTS["orange"]
-        gradient_card(ax, x - 0.05, y - 0.03, 0.10, 0.06, label, "", label, palette)
+        add_box(ax, x - 0.07, y - 0.03, 0.14, 0.06, label, fc="#f8fafc", ec=color, fontsize=9, weight="bold")
 
     # keyword-to-paper edges
     edges = [
